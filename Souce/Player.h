@@ -7,7 +7,7 @@ class Player
 {
 public:
 	void Reset(float x, float y);
-	void Update(bool canMove);
+	void Update(bool canMove, float speedMultiplier = 1.0f);
 	void Draw() const;
 
 	float GetX() const { return m_x; }

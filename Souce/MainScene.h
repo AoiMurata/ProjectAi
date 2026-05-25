@@ -9,11 +9,19 @@
 #include "Enemy.h"
 #include "EnemyAttack.h"
 #include "IceProjectile.h"
+#include "PlayerSettings.h"
 
 enum class MainPhase
 {
 	Charge,
 	Battle
+};
+
+enum class PauseState
+{
+	None,
+	Main,
+	Settings
 };
 
 class MainScene : public SceneBase
@@ -45,6 +53,13 @@ private:
 
 	static bool CirclesOverlap(float x1, float y1, float r1, float x2, float y2, float r2);
 
+	// Pause menu methods
+	SceneType UpdatePauseMenu();
+	void DrawPauseMenu() const;
+
+	// Active skill helper
+	void GetActiveSkillDetails(ColorPreset preset, int& outDuration, int& outCooldown, const char*& outName, const char*& outDesc) const;
+
 	MainPhase m_phase = MainPhase::Charge;
 	Player m_player;
 	Enemy m_enemies[MAX_ENEMIES];
@@ -56,4 +71,30 @@ private:
 	int m_chargeFrame = 0;
 	int m_stunFrames = 0;
 	int m_activeEnemyCount = 0;
+
+	// Pause menu variables
+	bool m_isPaused = false;
+	PauseState m_pauseState = PauseState::None;
+	int m_pauseMenuIndex = 0;
+	int m_pauseHoveredMenuIndex = -1;
+
+	// Click to start flow
+	bool m_roundStarted = false;
+
+	// Active skills tracking
+	bool m_skillActive = false;
+	int m_skillActiveTimer = 0;
+	int m_skillCooldownTimer = 0;
+	ColorPreset m_currentSkillColor = ColorPreset::Blue;
+
+	// Skill specific rendering variables
+	float m_blackholeX = 0.0f;
+	float m_blackholeY = 0.0f;
+	int m_blackholeTimer = 0;
+
+	float m_explosionX = 0.0f;
+	float m_explosionY = 0.0f;
+	float m_explosionDrawRadius = 0.0f;
+	bool m_drawExplosion = false;
+	int m_explosionDrawTimer = 0;
 };

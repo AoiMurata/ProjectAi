@@ -12,6 +12,7 @@ struct IceProjectile
 	float radius = 0.0f;
 	bool active = false;
 	bool homing = false;
+	bool isChain = false;
 
 	void Spawn(float fromX, float fromY, float targetX, float targetY, bool useHoming);
 	void Update(float targetX, float targetY, bool hasTarget, float homingTurnRate);

@@ -2,6 +2,7 @@
 // MainScene.cpp
 // =============================================================================
 #include "MainScene.h"
+#include "InputManager.h"
 #include "GameSession.h"
 #include "Constants.h"
 #include "DxLib.h"
@@ -28,6 +29,26 @@ void MainScene::OnEnter()
 	}
 
 	SpawnEnemies();
+
+	// Reset pause state
+	m_isPaused = false;
+	m_pauseState = PauseState::None;
+	m_pauseMenuIndex = 0;
+	m_pauseHoveredMenuIndex = -1;
+
+	// Reset round start
+	m_roundStarted = false;
+
+	// Reset active skill states
+	m_skillActive = false;
+	m_skillActiveTimer = 0;
+	m_skillCooldownTimer = 0;
+	m_currentSkillColor = PlayerSettings::GetSelectedPreset();
+
+	// Reset skill visual variables
+	m_blackholeTimer = 0;
+	m_drawExplosion = false;
+	m_explosionDrawTimer = 0;
 }
 
 void MainScene::OnExit()
@@ -116,12 +137,13 @@ void MainScene::UpdateEnemies()
 {
 	const float px = m_player.GetX();
 	const float py = m_player.GetY();
+	const bool bhActive = m_skillActive && (m_currentSkillColor == ColorPreset::Black);
 
 	for (int i = 0; i < m_activeEnemyCount; ++i)
 	{
 		if (m_enemies[i].IsAlive())
 		{
-			m_enemies[i].Update(px, py, m_enemyAttacks, MAX_ENEMY_ATTACKS);
+			m_enemies[i].Update(px, py, m_enemyAttacks, MAX_ENEMY_ATTACKS, bhActive, m_blackholeX, m_blackholeY);
 		}
 	}
 }
@@ -152,6 +174,24 @@ void MainScene::AddChargedShots()
 SceneType MainScene::UpdateChargePhase()
 {
 	m_player.Update(true);
+
+	if (!m_roundStarted)
+	{
+		// Wait for click or enter/space to start
+		if (InputManager::CheckDownMouse(MOUSE_INPUT_LEFT) == 1 ||
+			InputManager::CheckDownMouse(MOUSE_INPUT_RIGHT) == 1 ||
+			InputManager::CheckDownKey(KEY_INPUT_RETURN) == 1 ||
+			InputManager::CheckDownKey(KEY_INPUT_SPACE) == 1)
+		{
+			m_roundStarted = true;
+		}
+
+		// Consume the inputs so they don't count towards charging
+		int button = 0, clickX = 0, clickY = 0;
+		while (GetMouseInputLog(&button, &clickX, &clickY) == 0) {}
+
+		return SceneType::None;
+	}
 
 	int button = 0;
 	int clickX = 0;
@@ -234,7 +274,14 @@ bool MainScene::SpawnPlayerShot(float targetX, float targetY)
 
 void MainScene::TryAutoFire()
 {
-	if (m_shotsFired >= m_shotBudget || m_autoFireCooldown > 0)
+	const bool infiniteAmmo = m_skillActive && (m_currentSkillColor == ColorPreset::Green);
+
+	if (!infiniteAmmo && m_shotsFired >= m_shotBudget)
+	{
+		return;
+	}
+	
+	if (m_autoFireCooldown > 0)
 	{
 		return;
 	}
@@ -247,7 +294,10 @@ void MainScene::TryAutoFire()
 
 	if (SpawnPlayerShot(target->GetX(), target->GetY()))
 	{
-		++m_shotsFired;
+		if (!infiniteAmmo)
+		{
+			++m_shotsFired;
+		}
 		m_autoFireCooldown = GameSession::GetAutoFireInterval();
 	}
 }
@@ -299,6 +349,69 @@ void MainScene::CheckIceEnemyCollisions()
 			{
 				enemy.TakeDamage(damage);
 				enemy.OnHitByIce(m_player.GetX(), m_player.GetY());
+
+				// Apply E-Key Active skill hit effects
+				if (m_skillActive)
+				{
+					if (m_currentSkillColor == ColorPreset::Blue)
+					{
+						enemy.ApplySlow(3 * TARGET_FPS); // Slow for 3 seconds
+					}
+					else if (m_currentSkillColor == ColorPreset::Pink)
+					{
+						// Deal same damage to all other alive enemies
+						for (int j = 0; j < m_activeEnemyCount; ++j)
+						{
+							Enemy& otherEnemy = m_enemies[j];
+							if (otherEnemy.IsAlive() && &otherEnemy != &enemy)
+							{
+								otherEnemy.TakeDamage(damage);
+								otherEnemy.OnHitByIce(m_player.GetX(), m_player.GetY());
+							}
+						}
+					}
+					else if (m_currentSkillColor == ColorPreset::Orange)
+					{
+						enemy.ApplyDot(3 * TARGET_FPS, damage); // DOT for 3 seconds
+					}
+					else if (m_currentSkillColor == ColorPreset::Yellow && !shot.isChain)
+					{
+						// Chain: Find the nearest OTHER alive enemy to bounce to
+						const Enemy* nextTarget = nullptr;
+						float nextBestDistSq = 0.0f;
+						for (int j = 0; j < m_activeEnemyCount; ++j)
+						{
+							const Enemy& nextEnemy = m_enemies[j];
+							if (!nextEnemy.IsAlive() || &nextEnemy == &enemy)
+							{
+								continue;
+							}
+							const float dx = nextEnemy.GetX() - shot.x;
+							const float dy = nextEnemy.GetY() - shot.y;
+							const float distSq = dx * dx + dy * dy;
+							if (nextTarget == nullptr || distSq < nextBestDistSq)
+							{
+								nextTarget = &nextEnemy;
+								nextBestDistSq = distSq;
+							}
+						}
+
+						if (nextTarget != nullptr)
+						{
+							// Spawn chain shot
+							for (auto& chainShot : m_iceShots)
+							{
+								if (!chainShot.active)
+								{
+									chainShot.Spawn(shot.x, shot.y, nextTarget->GetX(), nextTarget->GetY(), GameSession::HasHoming());
+									chainShot.isChain = true; // Mark as chain shot so it doesn't bounce endlessly
+									break;
+								}
+							}
+						}
+					}
+				}
+
 				shot.active = false;
 				break;
 			}
@@ -385,6 +498,100 @@ bool MainScene::CirclesOverlap(float x1, float y1, float r1, float x2, float y2,
 
 SceneType MainScene::UpdateBattlePhase()
 {
+	// Update active skill cooldown
+	if (m_skillCooldownTimer > 0)
+	{
+		--m_skillCooldownTimer;
+	}
+
+	// Update active skill duration
+	if (m_skillActive)
+	{
+		--m_skillActiveTimer;
+		if (m_skillActiveTimer <= 0)
+		{
+			m_skillActive = false;
+			// Cooldown starts only after duration ends
+			int dur, cd;
+			const char* sName;
+			const char* sDesc;
+			GetActiveSkillDetails(m_currentSkillColor, dur, cd, sName, sDesc);
+			m_skillCooldownTimer = cd;
+		}
+	}
+
+	// Update explosion drawing timer
+	if (m_drawExplosion)
+	{
+		m_explosionDrawRadius += 340.0f / 30.0f; // Expand up to 350px in 30 frames
+		--m_explosionDrawTimer;
+		if (m_explosionDrawTimer <= 0)
+		{
+			m_drawExplosion = false;
+		}
+	}
+
+	// Check for active skill trigger (E key)
+	if (!m_skillActive && m_skillCooldownTimer <= 0 && m_stunFrames <= 0)
+	{
+		if (InputManager::CheckDownKey(KEY_INPUT_E) == 1)
+		{
+			m_currentSkillColor = PlayerSettings::GetSelectedPreset();
+			int dur, cd;
+			const char* sName;
+			const char* sDesc;
+			GetActiveSkillDetails(m_currentSkillColor, dur, cd, sName, sDesc);
+
+			if (m_currentSkillColor == ColorPreset::Brown)
+			{
+				// Trigger explosion instantly
+				m_explosionX = m_player.GetX();
+				m_explosionY = m_player.GetY();
+				m_drawExplosion = true;
+				m_explosionDrawRadius = 10.0f;
+				m_explosionDrawTimer = 30;
+
+				const int expDamage = GameSession::GetIceDamage() * 5;
+				const float expRadius = 350.0f;
+
+				for (int i = 0; i < m_activeEnemyCount; ++i)
+				{
+					Enemy& enemy = m_enemies[i];
+					if (!enemy.IsAlive())
+					{
+						continue;
+					}
+
+					float dx = enemy.GetX() - m_explosionX;
+					float dy = enemy.GetY() - m_explosionY;
+					float dist = sqrtf(dx * dx + dy * dy);
+					if (dist <= expRadius + enemy.GetRadius())
+					{
+						enemy.TakeDamage(expDamage);
+						enemy.OnHitByIce(m_explosionX, m_explosionY);
+					}
+				}
+
+				m_skillActive = true;
+				m_skillActiveTimer = 1; // Ends immediately on the next frame to start cooldown
+			}
+			else if (m_currentSkillColor == ColorPreset::Black)
+			{
+				// Singularity: Spawn black hole at player position
+				m_blackholeX = m_player.GetX();
+				m_blackholeY = m_player.GetY();
+				m_blackholeTimer = dur;
+				m_skillActive = true;
+				m_skillActiveTimer = dur;
+			}
+			else
+			{
+				m_skillActive = true;
+				m_skillActiveTimer = dur;
+			}
+		}
+	}
+
 	if (m_stunFrames > 0)
 	{
 		--m_stunFrames;
@@ -394,7 +601,14 @@ SceneType MainScene::UpdateBattlePhase()
 		--m_autoFireCooldown;
 	}
 
-	m_player.Update(m_stunFrames <= 0);
+	// Speed multiplier for White color preset
+	float speedMultiplier = 1.0f;
+	if (m_skillActive && m_currentSkillColor == ColorPreset::White)
+	{
+		speedMultiplier = 1.4f;
+	}
+
+	m_player.Update(m_stunFrames <= 0, speedMultiplier);
 	UpdateEnemies();
 	UpdateEnemyAttacks();
 	TryAutoFire();
@@ -424,6 +638,35 @@ SceneType MainScene::UpdateBattlePhase()
 
 SceneType MainScene::Update()
 {
+	// Toggle Pause with Escape key
+	if (InputManager::CheckDownKey(KEY_INPUT_ESCAPE) == 1)
+	{
+		if (m_isPaused)
+		{
+			if (m_pauseState == PauseState::Settings)
+			{
+				m_pauseState = PauseState::Main;
+			}
+			else
+			{
+				m_isPaused = false;
+				m_pauseState = PauseState::None;
+			}
+		}
+		else
+		{
+			m_isPaused = true;
+			m_pauseState = PauseState::Main;
+			m_pauseMenuIndex = 0;
+			m_pauseHoveredMenuIndex = -1;
+		}
+	}
+
+	if (m_isPaused)
+	{
+		return UpdatePauseMenu();
+	}
+
 	if (m_phase == MainPhase::Charge)
 	{
 		return UpdateChargePhase();
@@ -434,6 +677,18 @@ SceneType MainScene::Update()
 void MainScene::Draw()
 {
 	SetBackgroundColor(40, 50, 70);
+
+	// 1. Draw Black Hole gravity singularity underneath entities
+	if (m_skillActive && m_currentSkillColor == ColorPreset::Black)
+	{
+		const float rad = 80.0f + sinf((float)m_skillActiveTimer * 0.15f) * 10.0f;
+		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 180);
+		DrawCircle((int)m_blackholeX, (int)m_blackholeY, (int)rad, GetColor(20, 10, 35), TRUE);
+		DrawCircle((int)m_blackholeX, (int)m_blackholeY, (int)rad, GetColor(130, 60, 210), FALSE);
+		DrawCircle((int)m_blackholeX, (int)m_blackholeY, (int)(rad * 0.65f), GetColor(10, 5, 20), TRUE);
+		DrawCircle((int)m_blackholeX, (int)m_blackholeY, (int)(rad * 0.3f), GetColor(0, 0, 0), TRUE);
+		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	}
 
 	m_player.Draw();
 
@@ -452,6 +707,15 @@ void MainScene::Draw()
 		{
 			shot.Draw();
 		}
+	}
+
+	// 2. Draw self-explosion blast ring if active
+	if (m_drawExplosion)
+	{
+		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 140);
+		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 110, 30), TRUE);
+		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 220, 90), FALSE);
+		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 	}
 
 	const int textColor = GetColor(255, 255, 255);
@@ -486,6 +750,42 @@ void MainScene::Draw()
 			"Homing Lv.%d", GameSession::GetSpecialSkillLevel(SpecialSkillType::Homing));
 	}
 
+	// 3. Draw Active Skill HUD in Battle Phase
+	if (m_phase == MainPhase::Battle)
+	{
+		const ColorPreset currentPreset = PlayerSettings::GetSelectedPreset();
+		int dur, cd;
+		const char* sName;
+		const char* sDesc;
+		GetActiveSkillDetails(currentPreset, dur, cd, sName, sDesc);
+
+		DrawFormatString(SCREEN_WIDTH - 300, 130, GetColor(200, 220, 240), "------------------------");
+		DrawFormatString(SCREEN_WIDTH - 300, 150, GetColor(180, 200, 230), "Skill [E]: %s", sName);
+
+		if (m_skillActive)
+		{
+			const float sec = (float)m_skillActiveTimer / (float)TARGET_FPS;
+			const int activeColor = GetColor(100, 255, 120);
+			DrawFormatString(SCREEN_WIDTH - 300, 170, activeColor, "ACTIVE! (%.1fs left)", sec);
+		}
+		else if (m_skillCooldownTimer > 0)
+		{
+			const float sec = (float)m_skillCooldownTimer / (float)TARGET_FPS;
+			const int cdColor = GetColor(180, 180, 180);
+			DrawFormatString(SCREEN_WIDTH - 300, 170, cdColor, "COOLDOWN (%.1fs left)", sec);
+		}
+		else
+		{
+			static int glowFrame = 0;
+			++glowFrame;
+			const float glow = sinf((float)glowFrame * 0.1f) * 0.5f + 0.5f;
+			const int readyColor = GetColor((int)(200 + glow * 55), (int)(190 + glow * 65), (int)(50 + glow * 205));
+			DrawFormatString(SCREEN_WIDTH - 300, 170, readyColor, "READY (Press E!)");
+		}
+
+		DrawFormatString(SCREEN_WIDTH - 300, 190, GetColor(160, 170, 180), "%s", sDesc);
+	}
+
 	if (m_stunFrames > 0)
 	{
 		DrawFormatString(40, 120, GetColor(255, 200, 80),
@@ -513,5 +813,236 @@ void MainScene::Draw()
 			GetRemainingShots(), m_shotBudget, CountAliveEnemies());
 		DrawFormatString(40, 110, GetColor(255, 180, 200),
 			"Pink shot = drain balls  |  Yellow = stun 1 sec");
+	}
+
+	// 4. Click to start prompt overlay
+	if (m_phase == MainPhase::Charge && !m_roundStarted)
+	{
+		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 180);
+		DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GetColor(10, 15, 25), TRUE);
+		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+
+		static int pulseFrame = 0;
+		++pulseFrame;
+		const float pulse = sinf((float)pulseFrame * 0.08f) * 0.5f + 0.5f;
+		const int pulseColor = GetColor((int)(200 + pulse * 55), (int)(180 + pulse * 75), (int)(50 + pulse * 205));
+
+		DrawFormatString(SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT / 2 - 40, pulseColor, "CLICK TO START ROUND!");
+		DrawFormatString(SCREEN_WIDTH / 2 - 130, SCREEN_HEIGHT / 2 + 10, GetColor(180, 200, 220), "Round %d starting...", GameSession::GetRound());
+		DrawFormatString(SCREEN_WIDTH / 2 - 250, SCREEN_HEIGHT / 2 + 55, GetColor(140, 160, 180), "Click or Press Enter/Space to start charging ice shots!");
+	}
+
+	// 5. Draw pause menu overlay if paused
+	if (m_isPaused)
+	{
+		DrawPauseMenu();
+	}
+}
+
+void MainScene::GetActiveSkillDetails(ColorPreset preset, int& outDuration, int& outCooldown, const char*& outName, const char*& outDesc) const
+{
+	switch (preset)
+	{
+	case ColorPreset::Blue:
+		outDuration = 1 * TARGET_FPS;
+		outCooldown = 5 * TARGET_FPS;
+		outName = "Frost Touch";
+		outDesc = "Hits slow enemies (3s)";
+		break;
+	case ColorPreset::Green:
+		outDuration = 2 * TARGET_FPS;
+		outCooldown = 10 * TARGET_FPS;
+		outName = "Bullet Save";
+		outDesc = "Infinite ammo (2s)";
+		break;
+	case ColorPreset::Yellow:
+		outDuration = 2 * TARGET_FPS;
+		outCooldown = 10 * TARGET_FPS;
+		outName = "Chain Shot";
+		outDesc = "Hits chain to next enemy";
+		break;
+	case ColorPreset::Pink:
+		outDuration = 1 * TARGET_FPS;
+		outCooldown = 13 * TARGET_FPS;
+		outName = "Shared Pain";
+		outDesc = "Hits damage all enemies";
+		break;
+	case ColorPreset::Orange:
+		outDuration = 2 * TARGET_FPS;
+		outCooldown = 8 * TARGET_FPS;
+		outName = "Acid Burn";
+		outDesc = "Hits apply DOT (3s)";
+		break;
+	case ColorPreset::Black:
+		outDuration = 3 * TARGET_FPS;
+		outCooldown = 20 * TARGET_FPS;
+		outName = "Black Hole";
+		outDesc = "Pull enemies to center";
+		break;
+	case ColorPreset::White:
+		outDuration = 10 * TARGET_FPS;
+		outCooldown = 15 * TARGET_FPS;
+		outName = "Overdrive";
+		outDesc = "Speed x1.4 (10s)";
+		break;
+	case ColorPreset::Brown:
+		outDuration = 1;
+		outCooldown = 12 * TARGET_FPS;
+		outName = "Self-Explosion";
+		outDesc = "Explode dealing x5 damage";
+		break;
+	default:
+		outDuration = 0;
+		outCooldown = 0;
+		outName = "None";
+		outDesc = "";
+		break;
+	}
+}
+
+SceneType MainScene::UpdatePauseMenu()
+{
+	if (m_pauseState == PauseState::Settings)
+	{
+		if (InputManager::CheckDownKey(KEY_INPUT_RETURN) == 1 ||
+			InputManager::CheckDownKey(KEY_INPUT_ESCAPE) == 1)
+		{
+			m_pauseState = PauseState::Main;
+		}
+		return SceneType::None;
+	}
+
+	const int PAUSE_MENU_COUNT = 3;
+
+	int mouseX = 0;
+	int mouseY = 0;
+	GetMousePoint(&mouseX, &mouseY);
+
+	const int boxW = 380;
+	const int boxH = 280;
+	const int boxY = SCREEN_HEIGHT / 2 - boxH / 2;
+
+	const int itemW = 280;
+	const int itemH = 36;
+	const int itemGap = 50;
+	const int itemStartX = SCREEN_WIDTH / 2 - itemW / 2;
+	const int itemStartY = boxY + 80;
+
+	m_pauseHoveredMenuIndex = -1;
+	for (int i = 0; i < PAUSE_MENU_COUNT; ++i)
+	{
+		const int x = itemStartX;
+		const int y = itemStartY + i * itemGap;
+		if (mouseX >= x && mouseX <= x + itemW && mouseY >= y && mouseY <= y + itemH)
+		{
+			m_pauseHoveredMenuIndex = i;
+			m_pauseMenuIndex = i;
+		}
+	}
+
+	if (InputManager::CheckDownKey(KEY_INPUT_W) == 1)
+	{
+		m_pauseMenuIndex = (m_pauseMenuIndex + PAUSE_MENU_COUNT - 1) % PAUSE_MENU_COUNT;
+	}
+	if (InputManager::CheckDownKey(KEY_INPUT_S) == 1)
+	{
+		m_pauseMenuIndex = (m_pauseMenuIndex + 1) % PAUSE_MENU_COUNT;
+	}
+
+	auto activatePauseMenu = [&](int index) -> SceneType
+	{
+		switch (index)
+		{
+		case 0: // Resume
+			m_isPaused = false;
+			m_pauseState = PauseState::None;
+			break;
+		case 1: // Settings
+			m_pauseState = PauseState::Settings;
+			break;
+		case 2: // Return to Title
+			m_isPaused = false;
+			m_pauseState = PauseState::None;
+			return SceneType::Title;
+		}
+		return SceneType::None;
+	};
+
+	if (InputManager::CheckDownMouse(MOUSE_INPUT_LEFT) == 1 && m_pauseHoveredMenuIndex >= 0)
+	{
+		return activatePauseMenu(m_pauseHoveredMenuIndex);
+	}
+	if (InputManager::CheckDownKey(KEY_INPUT_RETURN) == 1)
+	{
+		return activatePauseMenu(m_pauseMenuIndex);
+	}
+
+	return SceneType::None;
+}
+
+void MainScene::DrawPauseMenu() const
+{
+	// Translucent backdrop
+	SetDrawBlendMode(DX_BLENDMODE_ALPHA, 180);
+	DrawBox(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, GetColor(15, 20, 30), TRUE);
+	SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+
+	const int boxW = 380;
+	const int boxH = 280;
+	const int boxX = SCREEN_WIDTH / 2 - boxW / 2;
+	const int boxY = SCREEN_HEIGHT / 2 - boxH / 2;
+
+	// Pause frame
+	DrawBox(boxX, boxY, boxX + boxW, boxY + boxH, GetColor(35, 45, 60), TRUE);
+	DrawBox(boxX, boxY, boxX + boxW, boxY + boxH, GetColor(100, 140, 220), FALSE);
+
+	if (m_pauseState == PauseState::Settings)
+	{
+		// Settings view
+		DrawFormatString(SCREEN_WIDTH / 2 - 60, boxY + 25, GetColor(255, 220, 120), "SETTINGS");
+		DrawFormatString(SCREEN_WIDTH / 2 - 130, boxY + 90, GetColor(220, 230, 255), "Current Color: %s", PlayerSettings::GetPresetName(PlayerSettings::GetSelectedPreset()));
+		DrawFormatString(SCREEN_WIDTH / 2 - 130, boxY + 130, GetColor(180, 190, 210), "Press Enter or ESC to return");
+		PlayerSettings::DrawPreview(SCREEN_WIDTH / 2, boxY + 190, 20);
+	}
+	else
+	{
+		// Pause menu view
+		DrawFormatString(SCREEN_WIDTH / 2 - 40, boxY + 25, GetColor(255, 220, 120), "PAUSED");
+
+		const int PAUSE_MENU_COUNT = 3;
+		const char* menuItems[] = {
+			"Resume (再開)",
+			"Settings (設定)",
+			"Return to Title (タイトルに戻る)"
+		};
+
+		const int itemW = 280;
+		const int itemH = 36;
+		const int itemGap = 50;
+		const int itemStartX = SCREEN_WIDTH / 2 - itemW / 2;
+		const int itemStartY = boxY + 80;
+
+		for (int i = 0; i < PAUSE_MENU_COUNT; ++i)
+		{
+			const bool selected = (i == m_pauseMenuIndex);
+			const bool hovered = (i == m_pauseHoveredMenuIndex);
+
+			int textColor;
+			if (selected && hovered) textColor = GetColor(255, 200, 40);
+			else if (hovered) textColor = GetColor(255, 160, 60);
+			else if (selected) textColor = GetColor(100, 180, 255);
+			else textColor = GetColor(180, 190, 200);
+
+			const int x = itemStartX;
+			const int y = itemStartY + i * itemGap;
+
+			if (hovered || selected)
+			{
+				DrawBox(x - 8, y - 4, x + itemW + 8, y + itemH + 4, GetColor(45, 60, 85), TRUE);
+				DrawBox(x - 8, y - 4, x + itemW + 8, y + itemH + 4, GetColor(80, 120, 200), FALSE);
+			}
+
+			DrawFormatString(x + 20, y + 8, textColor, "%s%s", selected ? "> " : "  ", menuItems[i]);
+		}
 	}
 }
