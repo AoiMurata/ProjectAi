@@ -47,4 +47,7 @@ private:
 	int m_colorIndex = 0;
 	int m_hoveredColorIndex = -1;
 	int m_doorOpenFrame = 0;
+
+	bool m_debugMode = false;
+	int m_debugSelectIndex = 0;
 };

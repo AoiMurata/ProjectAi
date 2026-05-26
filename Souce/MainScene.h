@@ -24,6 +24,15 @@ enum class PauseState
 	Settings
 };
 
+struct AssaultExplosion
+{
+	float x = 0.0f;
+	float y = 0.0f;
+	float radius = 0.0f;
+	int timer = 0;
+	bool active = false;
+};
+
 class MainScene : public SceneBase
 {
 public:
@@ -97,4 +106,6 @@ private:
 	float m_explosionDrawRadius = 0.0f;
 	bool m_drawExplosion = false;
 	int m_explosionDrawTimer = 0;
+
+	AssaultExplosion m_assaultExplosions[10];
 };

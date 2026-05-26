@@ -15,7 +15,10 @@ enum class EnemyType
 {
 	Normal,
 	MidBoss,
-	Boss
+	Boss,
+	Tank,
+	Assault,
+	Medic
 };
 
 class Enemy
@@ -24,6 +27,9 @@ public:
 	void ResetNormal(float x, float y, int hpMin, int hpMax);
 	void ResetMidBoss(float x, float y, int hp);
 	void ResetBoss(float x, float y, int hp);
+	void ResetTank(float x, float y, int hpMin, int hpMax);
+	void ResetAssault(float x, float y, int hpMin, int hpMax);
+	void ResetMedic(float x, float y, int hpMin, int hpMax);
 	void Update(float playerX, float playerY, EnemyAttack* attacks, int maxAttacks, bool hasBlackhole = false, float bhX = 0.0f, float bhY = 0.0f);
 	void Draw() const;
 
@@ -41,6 +47,14 @@ public:
 	void ApplySlow(int durationFrames);
 	void ApplyDot(int durationFrames, int damagePerSecond);
 
+	void Heal(int amount);
+	void GuideTowards(float tx, float ty);
+	bool GetJustDied() const { return m_justDied; }
+	void ClearJustDied() { m_justDied = false; }
+	int GetMaxHp() const { return m_maxHp; }
+
+	int m_healTimer = 0;
+
 private:
 	void PickRandomVelocity();
 	void StartFleeFrom(float fromX, float fromY);
@@ -54,6 +68,8 @@ private:
 	float m_speed = 0.0f;
 	float m_radius = 0.0f;
 	int m_hp = 0;
+	int m_maxHp = 0;
+	bool m_justDied = false;
 	int m_attackCooldown = 0;
 	EnemyMoveMode m_moveMode = EnemyMoveMode::Normal;
 	EnemyType m_type = EnemyType::Normal;

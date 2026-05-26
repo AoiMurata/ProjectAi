@@ -42,7 +42,7 @@ constexpr float ENEMY_SPEED_MIN  = 2.0f;
 constexpr float ENEMY_SPEED_MAX  = 7.0f;
 constexpr float ENEMY_FLEE_SPEED_MIN = 4.0f;
 constexpr float ENEMY_FLEE_SPEED_MAX = 9.0f;
-constexpr int   MAX_ENEMIES      = 7;
+constexpr int   MAX_ENEMIES      = 50;
 
 //	Boss constants
 constexpr int   MID_BOSS_BASE_HP = 100;
@@ -71,4 +71,4 @@ constexpr int   SCORE_MID_BOSS_BONUS = 1000;
 // Charging constants
 constexpr int   CHARGE_TIME_SECONDS = 10;
 constexpr int   CHARGE_TIME_FRAMES  = CHARGE_TIME_SECONDS * TARGET_FPS;
-constexpr int   MAX_CHARGE_SHOTS    = 200;
+constexpr int   MAX_CHARGE_SHOTS    = 600;

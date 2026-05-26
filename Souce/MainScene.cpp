@@ -49,6 +49,11 @@ void MainScene::OnEnter()
 	m_blackholeTimer = 0;
 	m_drawExplosion = false;
 	m_explosionDrawTimer = 0;
+
+	for (auto& exp : m_assaultExplosions)
+	{
+		exp.active = false;
+	}
 }
 
 void MainScene::OnExit()
@@ -67,69 +72,121 @@ void MainScene::SpawnEnemies()
 	const int hpMin = GameSession::GetEnemyHpMin();
 	const int hpMax = GameSession::GetEnemyHpMax();
 
-	m_activeEnemyCount = 0;
-
-	auto addEnemy = [&](float x, float y)
+	// Round increases enemy volume: start 7, +1 every 5 rounds
+	int totalEnemies = 7 + (round - 1) / 5;
+	if (totalEnemies > MAX_ENEMIES)
 	{
-		if (m_activeEnemyCount < MAX_ENEMIES)
+		totalEnemies = MAX_ENEMIES;
+	}
+
+	m_activeEnemyCount = totalEnemies;
+
+	int medicLimit = (round <= 10) ? 1 : 3;
+	int spawnedMedics = 0;
+
+	// Helper lambda to pick type and reset enemy
+	auto spawnMix = [&](int i, float x, float y) {
+		int roll = GetRand(99);
+		if (roll < 60)
 		{
-			++m_activeEnemyCount;
+			m_enemies[i].ResetNormal(x, y, hpMin, hpMax);
+		}
+		else
+		{
+			// named/special: Tank, Assault, Medic
+			if (round <= 10)
+			{
+				if (spawnedMedics < medicLimit)
+				{
+					m_enemies[i].ResetMedic(x, y, hpMin, hpMax);
+					++spawnedMedics;
+				}
+				else
+				{
+					m_enemies[i].ResetNormal(x, y, hpMin, hpMax);
+				}
+			}
+			else
+			{
+				// choose between Tank, Assault, Medic
+				int choice = GetRand(2);
+				if (choice == 2)
+				{
+					if (spawnedMedics < medicLimit)
+					{
+						m_enemies[i].ResetMedic(x, y, hpMin, hpMax);
+						++spawnedMedics;
+					}
+					else
+					{
+						// fallback to Tank or Assault
+						int choice2 = GetRand(1);
+						if (choice2 == 0)
+						{
+							m_enemies[i].ResetTank(x, y, hpMin, hpMax);
+						}
+						else
+						{
+							m_enemies[i].ResetAssault(x, y, hpMin, hpMax);
+						}
+					}
+				}
+				else if (choice == 0)
+				{
+					m_enemies[i].ResetTank(x, y, hpMin, hpMax);
+				}
+				else
+				{
+					m_enemies[i].ResetAssault(x, y, hpMin, hpMax);
+				}
+			}
 		}
 	};
 
 	if (spawnType == RoundSpawnType::Boss)
 	{
-		m_enemies[0].ResetBoss(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.28f,
-			GameSession::GetBossHp());
-		addEnemy(0, 0);
-
-		const float spots[][2] = {
-			{ SCREEN_WIDTH * 0.2f, SCREEN_HEIGHT * 0.55f },
-			{ SCREEN_WIDTH * 0.8f, SCREEN_HEIGHT * 0.55f },
-			{ SCREEN_WIDTH * 0.35f, SCREEN_HEIGHT * 0.75f },
-			{ SCREEN_WIDTH * 0.65f, SCREEN_HEIGHT * 0.75f },
-		};
-		for (int i = 0; i < 4; ++i)
+		m_enemies[0].ResetBoss(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.28f, GameSession::GetBossHp());
+		for (int i = 1; i < totalEnemies; ++i)
 		{
-			m_enemies[i + 1].ResetNormal(spots[i][0], spots[i][1], hpMin, hpMax);
-			addEnemy(spots[i][0], spots[i][1]);
+			int c = (i - 1) % 6;
+			int r = (i - 1) / 6;
+			float ex = 190.0f + c * 180.0f;
+			float ey = 120.0f + r * 70.0f;
+			// Avoid overlaying too close to the boss at the center
+			if (fabsf(ex - SCREEN_WIDTH * 0.5f) < 100.0f && ey < SCREEN_HEIGHT * 0.35f)
+			{
+				ey += 120.0f;
+			}
+			spawnMix(i, ex, ey);
 		}
-		m_activeEnemyCount = 5;
 	}
 	else if (spawnType == RoundSpawnType::MidBoss)
 	{
-		m_enemies[0].ResetMidBoss(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.30f,
-			GameSession::GetMidBossHp());
-		addEnemy(0, 0);
-
-		const float spots[][2] = {
-			{ SCREEN_WIDTH * 0.22f, SCREEN_HEIGHT * 0.55f },
-			{ SCREEN_WIDTH * 0.78f, SCREEN_HEIGHT * 0.55f },
-			{ SCREEN_WIDTH * 0.35f, SCREEN_HEIGHT * 0.72f },
-			{ SCREEN_WIDTH * 0.65f, SCREEN_HEIGHT * 0.72f },
-			{ SCREEN_WIDTH * 0.50f, SCREEN_HEIGHT * 0.50f },
-		};
-		for (int i = 0; i < 5; ++i)
+		m_enemies[0].ResetMidBoss(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.30f, GameSession::GetMidBossHp());
+		for (int i = 1; i < totalEnemies; ++i)
 		{
-			m_enemies[i + 1].ResetNormal(spots[i][0], spots[i][1], hpMin, hpMax);
+			int c = (i - 1) % 6;
+			int r = (i - 1) / 6;
+			float ex = 190.0f + c * 180.0f;
+			float ey = 120.0f + r * 70.0f;
+			// Avoid overlaying too close to the midboss
+			if (fabsf(ex - SCREEN_WIDTH * 0.5f) < 100.0f && ey < SCREEN_HEIGHT * 0.38f)
+			{
+				ey += 120.0f;
+			}
+			spawnMix(i, ex, ey);
 		}
-		m_activeEnemyCount = 6;
 	}
 	else
 	{
-		const float spots[][2] = {
-			{ SCREEN_WIDTH * 0.25f, SCREEN_HEIGHT * 0.25f },
-			{ SCREEN_WIDTH * 0.50f, SCREEN_HEIGHT * 0.20f },
-			{ SCREEN_WIDTH * 0.75f, SCREEN_HEIGHT * 0.25f },
-			{ SCREEN_WIDTH * 0.35f, SCREEN_HEIGHT * 0.40f },
-			{ SCREEN_WIDTH * 0.65f, SCREEN_HEIGHT * 0.40f },
-			{ SCREEN_WIDTH * 0.50f, SCREEN_HEIGHT * 0.50f },
-		};
-		for (int i = 0; i < MAX_ENEMIES; ++i)
+		for (int i = 0; i < totalEnemies; ++i)
 		{
-			m_enemies[i].ResetNormal(spots[i][0], spots[i][1], hpMin, hpMax);
+			int c = i % 6;
+			int r = i / 6;
+			float ex = 190.0f + c * 180.0f;
+			float ey = 120.0f + r * 70.0f;
+			spawnMix(i, ex, ey);
 		}
-		m_activeEnemyCount = MAX_ENEMIES;
 	}
 }
 
@@ -165,7 +222,7 @@ void MainScene::StartBattlePhase()
 void MainScene::AddChargedShots()
 {
 	const int perClick = GameSession::GetChargePerClick();
-	for (int i = 0; i < perClick && m_shotBudget < MAX_CHARGE_SHOTS; ++i)
+	for (int i = 0; i < perClick && m_shotBudget < GameSession::GetMaxChargeShots(); ++i)
 	{
 		++m_shotBudget;
 	}
@@ -219,6 +276,7 @@ const Enemy* MainScene::FindNearestAliveEnemy(float fromX, float fromY) const
 {
 	const Enemy* nearest = nullptr;
 	float bestDistSq = 0.0f;
+	bool foundTank = false;
 
 	for (int i = 0; i < m_activeEnemyCount; ++i)
 	{
@@ -228,11 +286,24 @@ const Enemy* MainScene::FindNearestAliveEnemy(float fromX, float fromY) const
 			continue;
 		}
 
+		const bool isTank = (enemy.GetType() == EnemyType::Tank);
+
+		if (foundTank && !isTank)
+		{
+			continue;
+		}
+
 		const float dx = enemy.GetX() - fromX;
 		const float dy = enemy.GetY() - fromY;
 		const float distSq = dx * dx + dy * dy;
 
-		if (nearest == nullptr || distSq < bestDistSq)
+		if (!foundTank && isTank)
+		{
+			nearest = &enemy;
+			bestDistSq = distSq;
+			foundTank = true;
+		}
+		else if (nearest == nullptr || distSq < bestDistSq)
 		{
 			nearest = &enemy;
 			bestDistSq = distSq;
@@ -531,6 +602,20 @@ SceneType MainScene::UpdateBattlePhase()
 		}
 	}
 
+	// Update assault explosions animation
+	for (auto& exp : m_assaultExplosions)
+	{
+		if (exp.active)
+		{
+			exp.radius += 110.0f / 30.0f; // Expand up to 120px in 30 frames
+			--exp.timer;
+			if (exp.timer <= 0)
+			{
+				exp.active = false;
+			}
+		}
+	}
+
 	// Check for active skill trigger (E key)
 	if (!m_skillActive && m_skillCooldownTimer <= 0 && m_stunFrames <= 0)
 	{
@@ -608,12 +693,120 @@ SceneType MainScene::UpdateBattlePhase()
 		speedMultiplier = 1.4f;
 	}
 
+	// Update Medic targeting guidance before updating enemies
+	for (int i = 0; i < m_activeEnemyCount; ++i)
+	{
+		Enemy& enemy = m_enemies[i];
+		if (enemy.IsAlive() && enemy.GetType() == EnemyType::Medic)
+		{
+			Enemy* lowestAlly = nullptr;
+			float lowestHpRatio = 1.0f;
+			for (int j = 0; j < m_activeEnemyCount; ++j)
+			{
+				Enemy& other = m_enemies[j];
+				if (other.IsAlive() && &other != &enemy)
+				{
+					float ratio = (float)other.GetHp() / other.GetMaxHp();
+					if (ratio < lowestHpRatio)
+					{
+						lowestHpRatio = ratio;
+						lowestAlly = &other;
+					}
+				}
+			}
+
+			if (lowestAlly != nullptr && lowestHpRatio < 1.0f)
+			{
+				enemy.GuideTowards(lowestAlly->GetX(), lowestAlly->GetY());
+			}
+		}
+	}
+
 	m_player.Update(m_stunFrames <= 0, speedMultiplier);
 	UpdateEnemies();
+
+	// Update Medic healing pulses
+	for (int i = 0; i < m_activeEnemyCount; ++i)
+	{
+		Enemy& enemy = m_enemies[i];
+		if (enemy.IsAlive() && enemy.GetType() == EnemyType::Medic)
+		{
+			enemy.m_healTimer++;
+			if (enemy.m_healTimer >= 60)
+			{
+				enemy.m_healTimer = 0;
+				float mx = enemy.GetX();
+				float my = enemy.GetY();
+				for (int j = 0; j < m_activeEnemyCount; ++j)
+				{
+					Enemy& other = m_enemies[j];
+					if (other.IsAlive() && &other != &enemy)
+					{
+						float dx = other.GetX() - mx;
+						float dy = other.GetY() - my;
+						float dist = sqrtf(dx*dx + dy*dy);
+						if (dist <= 160.0f)
+						{
+							int amount = (int)(other.GetMaxHp() * 0.10f);
+							if (amount < 1) amount = 1;
+							other.Heal(amount);
+						}
+					}
+				}
+			}
+		}
+	}
+
 	UpdateEnemyAttacks();
 	TryAutoFire();
 	UpdateIceProjectiles();
 	CheckIceEnemyCollisions();
+
+	// Check for Assault enemy deaths
+	for (int i = 0; i < m_activeEnemyCount; ++i)
+	{
+		Enemy& enemy = m_enemies[i];
+		if (enemy.GetType() == EnemyType::Assault && enemy.GetJustDied())
+		{
+			enemy.ClearJustDied();
+			float ex = enemy.GetX();
+			float ey = enemy.GetY();
+
+			// Spawn visual explosion
+			for (auto& exp : m_assaultExplosions)
+			{
+				if (!exp.active)
+				{
+					exp.x = ex;
+					exp.y = ey;
+					exp.radius = 10.0f;
+					exp.timer = 30;
+					exp.active = true;
+					break;
+				}
+			}
+
+			// Player ammo drain check
+			float px = m_player.GetX();
+			float py = m_player.GetY();
+			float dist = sqrtf((px - ex)*(px - ex) + (py - ey)*(py - ey));
+			if (dist <= 120.0f + m_player.GetRadius())
+			{
+				int remaining = m_shotBudget - m_shotsFired;
+				int drain = (int)(remaining * 0.04f);
+				if (drain < 1 && remaining > 0)
+				{
+					drain = 1;
+				}
+				m_shotBudget -= drain;
+				if (m_shotBudget < m_shotsFired)
+				{
+					m_shotBudget = m_shotsFired;
+				}
+			}
+		}
+	}
+
 	CheckEnemyAttackPlayer();
 
 	if (CountAliveEnemies() == 0)
@@ -699,11 +892,11 @@ void MainScene::Draw()
 
 	if (m_phase == MainPhase::Battle)
 	{
-		for (const auto& attack : m_enemyAttacks)
+		for (auto& attack : m_enemyAttacks)
 		{
 			attack.Draw();
 		}
-		for (const auto& shot : m_iceShots)
+		for (auto& shot : m_iceShots)
 		{
 			shot.Draw();
 		}
@@ -716,6 +909,18 @@ void MainScene::Draw()
 		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 110, 30), TRUE);
 		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 220, 90), FALSE);
 		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	}
+
+	// Draw assault death explosion visual effects
+	for (const auto& exp : m_assaultExplosions)
+	{
+		if (exp.active)
+		{
+			SetDrawBlendMode(DX_BLENDMODE_ALPHA, 130 * exp.timer / 30);
+			DrawCircle((int)exp.x, (int)exp.y, (int)exp.radius, GetColor(255, 90, 40), TRUE);
+			DrawCircle((int)exp.x, (int)exp.y, (int)exp.radius, GetColor(255, 200, 100), FALSE);
+			SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+		}
 	}
 
 	const int textColor = GetColor(255, 255, 255);
@@ -762,28 +967,52 @@ void MainScene::Draw()
 		DrawFormatString(SCREEN_WIDTH - 300, 130, GetColor(200, 220, 240), "------------------------");
 		DrawFormatString(SCREEN_WIDTH - 300, 150, GetColor(180, 200, 230), "Skill [E]: %s", sName);
 
+		// Skill progress bar
+		int barX = SCREEN_WIDTH - 300;
+		int barY = 175;
+		int barW = 240;
+		int barH = 20;
+
+		DrawBox(barX, barY, barX + barW, barY + barH, GetColor(40, 50, 65), TRUE);
+		DrawBox(barX, barY, barX + barW, barY + barH, GetColor(80, 100, 125), FALSE);
+
 		if (m_skillActive)
 		{
+			float progress = (float)m_skillActiveTimer / (float)dur;
+			if (progress < 0.0f) progress = 0.0f;
+			if (progress > 1.0f) progress = 1.0f;
+
+			int fillW = (int)(progress * barW);
+			int activeColor = PlayerSettings::GetPresetBodyColor(currentPreset);
+			DrawBox(barX + 2, barY + 2, barX + 2 + fillW - 4, barY + barH - 2, activeColor, TRUE);
+
 			const float sec = (float)m_skillActiveTimer / (float)TARGET_FPS;
-			const int activeColor = GetColor(100, 255, 120);
-			DrawFormatString(SCREEN_WIDTH - 300, 170, activeColor, "ACTIVE! (%.1fs left)", sec);
+			DrawFormatString(barX + 10, barY + 3, GetColor(255, 255, 255), "ACTIVE (%.1fs left)", sec);
 		}
 		else if (m_skillCooldownTimer > 0)
 		{
+			float progress = 1.0f - (float)m_skillCooldownTimer / (float)cd;
+			if (progress < 0.0f) progress = 0.0f;
+			if (progress > 1.0f) progress = 1.0f;
+
+			int fillW = (int)(progress * barW);
+			DrawBox(barX + 2, barY + 2, barX + 2 + fillW - 4, barY + barH - 2, GetColor(110, 110, 110), TRUE);
+
 			const float sec = (float)m_skillCooldownTimer / (float)TARGET_FPS;
-			const int cdColor = GetColor(180, 180, 180);
-			DrawFormatString(SCREEN_WIDTH - 300, 170, cdColor, "COOLDOWN (%.1fs left)", sec);
+			DrawFormatString(barX + 10, barY + 3, GetColor(200, 200, 200), "COOLDOWN (%.1fs left)", sec);
 		}
 		else
 		{
 			static int glowFrame = 0;
 			++glowFrame;
 			const float glow = sinf((float)glowFrame * 0.1f) * 0.5f + 0.5f;
-			const int readyColor = GetColor((int)(200 + glow * 55), (int)(190 + glow * 65), (int)(50 + glow * 205));
-			DrawFormatString(SCREEN_WIDTH - 300, 170, readyColor, "READY (Press E!)");
+			const int readyColor = GetColor((int)(100 + glow * 50), (int)(180 + glow * 40), (int)(220 + glow * 35));
+			DrawBox(barX + 2, barY + 2, barX + barW - 2, barY + barH - 2, readyColor, TRUE);
+
+			DrawFormatString(barX + 10, barY + 3, GetColor(255, 255, 255), "READY (Press E!)");
 		}
 
-		DrawFormatString(SCREEN_WIDTH - 300, 190, GetColor(160, 170, 180), "%s", sDesc);
+		DrawFormatString(SCREEN_WIDTH - 300, 205, GetColor(160, 170, 180), "%s", sDesc);
 	}
 
 	if (m_stunFrames > 0)
@@ -796,14 +1025,49 @@ void MainScene::Draw()
 	{
 		const int framesLeft = CHARGE_TIME_FRAMES - m_chargeFrame;
 		const int secondsLeft = (framesLeft + TARGET_FPS - 1) / TARGET_FPS;
-		const int timerColor = (secondsLeft <= 3)
-			? GetColor(255, 120, 120) : GetColor(255, 220, 120);
 
 		DrawFormatString(40, 40, textColor, "Charge time! Click to store ice balls");
-		DrawFormatString(40, 80, timerColor, "Time left: %d sec", secondsLeft);
-		DrawFormatString(40, 120, GetColor(200, 240, 255),
+		DrawFormatString(40, 80, GetColor(200, 240, 255),
 			"Charged: %d / %d  (+%d per click)",
-			m_shotBudget, MAX_CHARGE_SHOTS, GameSession::GetChargePerClick());
+			m_shotBudget, GameSession::GetMaxChargeShots(), GameSession::GetChargePerClick());
+
+		// Draw Circular Timer Gauge at the Top-Center
+		int cx = SCREEN_WIDTH / 2;
+		int cy = 60;
+		int r = 26;
+		float ratio = (float)framesLeft / CHARGE_TIME_FRAMES;
+		if (ratio < 0.0f) ratio = 0.0f;
+		if (ratio > 1.0f) ratio = 1.0f;
+
+		// Background ring
+		DrawCircle(cx, cy, r + 4, GetColor(30, 40, 50), TRUE);
+		DrawCircle(cx, cy, r + 4, GetColor(80, 100, 120), FALSE);
+
+		// Sector segment
+		int segments = 60;
+		float angleLimit = ratio * 2.0f * 3.14159265f;
+		int fillCol = (secondsLeft <= 3) ? GetColor(255, 100, 100) : GetColor(100, 200, 255);
+
+		for (int i = 0; i < segments; ++i)
+		{
+			float angle1 = (float)i / segments * 2.0f * 3.14159265f;
+			float angle2 = (float)(i + 1) / segments * 2.0f * 3.14159265f;
+			if (angle1 < angleLimit)
+			{
+				if (angle2 > angleLimit) angle2 = angleLimit;
+				int x1 = cx + (int)(cosf(angle1 - 3.14159265f / 2.0f) * r);
+				int y1 = cy + (int)(sinf(angle1 - 3.14159265f / 2.0f) * r);
+				int x2 = cx + (int)(cosf(angle2 - 3.14159265f / 2.0f) * r);
+				int y2 = cy + (int)(sinf(angle2 - 3.14159265f / 2.0f) * r);
+				DrawTriangle(cx, cy, x1, y1, x2, y2, fillCol, TRUE);
+			}
+		}
+		// Small inner core for premium donut look
+		DrawCircle(cx, cy, r - 8, GetColor(30, 40, 50), TRUE);
+		DrawCircle(cx, cy, r - 8, GetColor(80, 100, 120), FALSE);
+		
+		// Draw remaining seconds in the center of the donut!
+		DrawFormatString(cx - 6, cy - 8, GetColor(255, 255, 255), "%d", secondsLeft);
 	}
 	else
 	{
@@ -1011,9 +1275,9 @@ void MainScene::DrawPauseMenu() const
 
 		const int PAUSE_MENU_COUNT = 3;
 		const char* menuItems[] = {
-			"Resume (再開)",
-			"Settings (設定)",
-			"Return to Title (タイトルに戻る)"
+			"Resume",
+			"Settings",
+			"Return to Title"
 		};
 
 		const int itemW = 280;

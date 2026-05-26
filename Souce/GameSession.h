@@ -32,11 +32,17 @@ enum class RoundSpawnType
 namespace GameSession
 {
 	void StartNewRun();
+	void StartDebugRun();
 	void OnRoundCleared(int shotsRemaining, bool bossWasDefeated);
 	void ApplySkill(SkillType skill);
 	bool ApplySpecialSkill(SpecialSkillType skill);
 	void SetGameOver();
 	void ConsumeSpecialSkillPick();
+
+	void SetSkillLevel(SkillType s, int lvl);
+	void SetSpecialSkillLevel(SpecialSkillType s, int lvl);
+	void SetRound(int r);
+	int GetMaxChargeShots();
 
 	GameOutcome GetOutcome();
 	int GetRound();

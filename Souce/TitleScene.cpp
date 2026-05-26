@@ -7,6 +7,7 @@
 #include "PlayerSettings.h"
 #include "Constants.h"
 #include "DxLib.h"
+#include <cmath>
 
 namespace
 {
@@ -219,11 +220,79 @@ SceneType TitleScene::UpdateMainMenu()
 
 SceneType TitleScene::UpdateSettings()
 {
+	if (InputManager::CheckDownKey(KEY_INPUT_F1) == 1)
+	{
+		m_debugMode = !m_debugMode;
+		m_debugSelectIndex = 0;
+	}
+
+	if (m_debugMode)
+	{
+		// Press F2 to immediately launch configured game
+		if (InputManager::CheckDownKey(KEY_INPUT_F2) == 1)
+		{
+			GameSession::StartDebugRun();
+			m_debugMode = false;
+			m_mode = TitleScreenMode::MainMenu;
+			return SceneType::Main;
+		}
+
+		// A/D to select parameter
+		if (InputManager::CheckDownKey(KEY_INPUT_A) == 1)
+		{
+			m_debugSelectIndex = (m_debugSelectIndex + 6 - 1) % 6;
+		}
+		if (InputManager::CheckDownKey(KEY_INPUT_D) == 1)
+		{
+			m_debugSelectIndex = (m_debugSelectIndex + 1) % 6;
+		}
+
+		// W/S to increase/decrease
+		int diff = 0;
+		if (InputManager::CheckDownKey(KEY_INPUT_W) == 1) diff = 1;
+		if (InputManager::CheckDownKey(KEY_INPUT_S) == 1) diff = -1;
+
+		if (diff != 0)
+		{
+			if (m_debugSelectIndex == 0)
+			{
+				int val = GameSession::GetSkillLevel(SkillType::FireRate);
+				GameSession::SetSkillLevel(SkillType::FireRate, val + diff);
+			}
+			else if (m_debugSelectIndex == 1)
+			{
+				int val = GameSession::GetSkillLevel(SkillType::ChargeBoost);
+				GameSession::SetSkillLevel(SkillType::ChargeBoost, val + diff);
+			}
+			else if (m_debugSelectIndex == 2)
+			{
+				int val = GameSession::GetSkillLevel(SkillType::Damage);
+				GameSession::SetSkillLevel(SkillType::Damage, val + diff);
+			}
+			else if (m_debugSelectIndex == 3)
+			{
+				int val = GameSession::GetSpecialSkillLevel(SpecialSkillType::MultiShot);
+				GameSession::SetSpecialSkillLevel(SpecialSkillType::MultiShot, val + diff);
+			}
+			else if (m_debugSelectIndex == 4)
+			{
+				int val = GameSession::GetSpecialSkillLevel(SpecialSkillType::Homing);
+				GameSession::SetSpecialSkillLevel(SpecialSkillType::Homing, val + diff);
+			}
+			else if (m_debugSelectIndex == 5)
+			{
+				int val = GameSession::GetRound();
+				GameSession::SetRound(val + diff);
+			}
+		}
+	}
+
 	if (InputManager::CheckDownKey(KEY_INPUT_ESCAPE) == 1 ||
 		InputManager::CheckDownKey(KEY_INPUT_B) == 1 ||
-		InputManager::CheckDownKey(KEY_INPUT_RETURN) == 1)
+		(!m_debugMode && InputManager::CheckDownKey(KEY_INPUT_RETURN) == 1))
 	{
 		m_mode = TitleScreenMode::MainMenu;
+		m_debugMode = false;
 	}
 	return SceneType::None;
 }
@@ -233,7 +302,7 @@ SceneType TitleScene::UpdateColorCustomize()
 	const int presetCount = PlayerSettings::GetPresetCount();
 	const int cols = 4;
 	const int startX = SCREEN_WIDTH / 2 - 280;
-	const int startY = 280;
+	const int startY = 250;
 	const int cellW = 130;
 	const int cellH = 50;
 
@@ -368,15 +437,114 @@ void TitleScene::DrawMainMenu()
 	PlayerSettings::DrawPreview(SCREEN_WIDTH - 100, SCREEN_HEIGHT - 90, 22);
 }
 
+void GetColorSkillText(ColorPreset preset, const char*& outName, const char*& outDesc, const char*& outCd)
+{
+	switch (preset)
+	{
+	case ColorPreset::Blue:
+		outName = "Frost Touch";
+		outDesc = "E-key: Attacks slow hit enemies for 3s (Active for 1s).";
+		outCd = "Cooldown: 5s";
+		break;
+	case ColorPreset::Green:
+		outName = "Bullet Save";
+		outDesc = "E-key: Attacks consume no stored shots for 2s.";
+		outCd = "Cooldown: 10s";
+		break;
+	case ColorPreset::Yellow:
+		outName = "Chain Shot";
+		outDesc = "E-key: Shot bounces to other close enemies for 2s.";
+		outCd = "Cooldown: 10s";
+		break;
+	case ColorPreset::Pink:
+		outName = "Shared Pain";
+		outDesc = "E-key: Attacks share damage to all enemies for 1s.";
+		outCd = "Cooldown: 13s";
+		break;
+	case ColorPreset::Orange:
+		outName = "Acid Burn";
+		outDesc = "E-key: Attacks deal continuous damage for 3s (Active for 2s).";
+		outCd = "Cooldown: 8s";
+		break;
+	case ColorPreset::Black:
+		outName = "Black Hole";
+		outDesc = "E-key: Spawn gravity singularity pulling enemies for 3s.";
+		outCd = "Cooldown: 20s";
+		break;
+	case ColorPreset::White:
+		outName = "Overdrive";
+		outDesc = "E-key: Player speed is multiplied by 1.4x for 10s.";
+		outCd = "Cooldown: 15s";
+		break;
+	case ColorPreset::Brown:
+		outName = "Self-Explosion";
+		outDesc = "E-key: Instantly blast nearby enemies for 5x damage.";
+		outCd = "Cooldown: 12s";
+		break;
+	default:
+		outName = "";
+		outDesc = "";
+		outCd = "";
+		break;
+	}
+}
+
 void TitleScene::DrawSettings()
 {
 	DrawRefrigerator(1.0f);
 
-	DrawFormatString(SCREEN_WIDTH / 2 - 80, 160, GetColor(40, 60, 100), "SETTINGS");
-	DrawFormatString(SCREEN_WIDTH / 2 - 200, 230, GetColor(80, 90, 110),
-		"(Sound and other options coming soon)");
-	DrawFormatString(SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT - 60,
-		GetColor(100, 100, 120), "Enter / ESC: Back to menu");
+	if (m_debugMode)
+	{
+		DrawFormatString(SCREEN_WIDTH / 2 - 120, 95, GetColor(255, 60, 60), "DEBUG MODE ACTIVE");
+		DrawFormatString(SCREEN_WIDTH / 2 - 190, 125, GetColor(80, 90, 110), "A/D: Select skill | W/S: Edit value");
+
+		const char* paramNames[] = {
+			"Fire Rate Level",
+			"Charge Boost Level",
+			"Damage Level",
+			"Multi Shot Level",
+			"Homing Level",
+			"Round Number"
+		};
+
+		int paramValues[] = {
+			GameSession::GetSkillLevel(SkillType::FireRate),
+			GameSession::GetSkillLevel(SkillType::ChargeBoost),
+			GameSession::GetSkillLevel(SkillType::Damage),
+			GameSession::GetSpecialSkillLevel(SpecialSkillType::MultiShot),
+			GameSession::GetSpecialSkillLevel(SpecialSkillType::Homing),
+			GameSession::GetRound()
+		};
+
+		for (int i = 0; i < 6; ++i)
+		{
+			const bool selected = (i == m_debugSelectIndex);
+			int color = selected ? GetColor(255, 60, 60) : GetColor(60, 80, 100);
+			int bgCol = selected ? GetColor(255, 235, 235) : GetColor(240, 245, 250);
+
+			int x = SCREEN_WIDTH / 2 - 160;
+			int y = 160 + i * 40;
+			DrawBox(x - 10, y - 4, x + 330, y + 26, bgCol, TRUE);
+			DrawBox(x - 10, y - 4, x + 330, y + 26, color, FALSE);
+
+			DrawFormatString(x + 10, y, color, "%s %s: %d", selected ? "->" : "  ", paramNames[i], paramValues[i]);
+		}
+
+		static int debugPulseFrame = 0;
+		++debugPulseFrame;
+		const float dp = sinf((float)debugPulseFrame * 0.1f) * 0.5f + 0.5f;
+		const int f2Color = GetColor((int)(220 + dp * 35), (int)(180 + dp * 50), (int)(60 + dp * 120));
+		DrawFormatString(SCREEN_WIDTH / 2 - 165, SCREEN_HEIGHT - 100, f2Color, "Press F2 to START battle with these stats!");
+	}
+	else
+	{
+		DrawFormatString(SCREEN_WIDTH / 2 - 80, 160, GetColor(40, 60, 100), "SETTINGS");
+		DrawFormatString(SCREEN_WIDTH / 2 - 200, 230, GetColor(80, 90, 110),
+			"(Sound and other options coming soon)");
+		
+		DrawFormatString(SCREEN_WIDTH / 2 - 180, SCREEN_HEIGHT - 60,
+			GetColor(100, 100, 120), "Enter / ESC: Back to menu");
+	}
 }
 
 void TitleScene::DrawColorCustomize()
@@ -390,7 +558,7 @@ void TitleScene::DrawColorCustomize()
 	const int presetCount = PlayerSettings::GetPresetCount();
 	const int cols = 4;
 	const int startX = SCREEN_WIDTH / 2 - 280;
-	const int startY = 280;
+	const int startY = 230; // Shifted up to fit skill descriptions nicely
 	const int cellW = 130;
 	const int cellH = 50;
 
@@ -429,8 +597,26 @@ void TitleScene::DrawColorCustomize()
 			PlayerSettings::GetPresetName(preset));
 	}
 
-	PlayerSettings::DrawPreview(SCREEN_WIDTH / 2 - 220, 520, 36);
-	DrawFormatString(SCREEN_WIDTH / 2 - 80, 560, GetColor(80, 90, 110), "Preview");
+	PlayerSettings::DrawPreview(SCREEN_WIDTH / 2 - 230, 410, 26);
+	DrawFormatString(SCREEN_WIDTH / 2 - 250, 445, GetColor(80, 90, 110), "Preview");
+
+	const char* sName = "";
+	const char* sDesc = "";
+	const char* sCd = "";
+	GetColorSkillText((ColorPreset)m_colorIndex, sName, sDesc, sCd);
+
+	// Draw beautiful description box on the right of preview
+	int descX = SCREEN_WIDTH / 2 - 130;
+	int descY = 380;
+	int descW = 410;
+	int descH = 100;
+	int borderCol = PlayerSettings::GetPresetBodyColor((ColorPreset)m_colorIndex);
+	DrawBox(descX, descY, descX + descW, descY + descH, GetColor(245, 250, 255), TRUE);
+	DrawBox(descX, descY, descX + descW, descY + descH, borderCol, FALSE);
+
+	DrawFormatString(descX + 15, descY + 12, GetColor(40, 100, 220), "Skill [E]: %s", sName);
+	DrawFormatString(descX + 15, descY + 40, GetColor(80, 90, 110), "%s", sDesc);
+	DrawFormatString(descX + 15, descY + 68, GetColor(200, 60, 60), "%s", sCd);
 
 	DrawFormatString(SCREEN_WIDTH / 2 - 240, SCREEN_HEIGHT - 60,
 		GetColor(100, 100, 120), "W/S/A/D or Mouse  |  Enter/Q/ESC: Back");

@@ -6,7 +6,6 @@
 #include "DxLib.h"
 #include <cmath>
 
-
 namespace
 {
 	float RandomRange(float minVal, float maxVal)
@@ -75,6 +74,7 @@ void Enemy::ResetNormal(float x, float y, int hpMin, int hpMax)
 	m_dotTimer = 0;
 	m_dotTickTimer = 0;
 	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
 
 	if (hpMax < hpMin)
 	{
@@ -82,6 +82,8 @@ void Enemy::ResetNormal(float x, float y, int hpMin, int hpMax)
 	}
 	const int range = hpMax - hpMin + 1;
 	m_hp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
+	m_maxHp = m_hp;
+	m_justDied = false;
 	m_moveMode = EnemyMoveMode::Normal;
 	PickRandomVelocity();
 }
@@ -93,11 +95,14 @@ void Enemy::ResetMidBoss(float x, float y, int hp)
 	m_y = y;
 	m_radius = MID_BOSS_RADIUS;
 	m_hp = hp;
+	m_maxHp = hp;
+	m_justDied = false;
 	m_attackCooldown = 30;
 	m_slowTimer = 0;
 	m_dotTimer = 0;
 	m_dotTickTimer = 0;
 	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
 	m_moveMode = EnemyMoveMode::Normal;
 	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX * 0.8f);
 	PickRandomDirection(m_speed, m_vx, m_vy);
@@ -110,13 +115,97 @@ void Enemy::ResetBoss(float x, float y, int hp)
 	m_y = y;
 	m_radius = BOSS_RADIUS;
 	m_hp = hp;
+	m_maxHp = hp;
+	m_justDied = false;
 	m_attackCooldown = 20;
 	m_slowTimer = 0;
 	m_dotTimer = 0;
 	m_dotTickTimer = 0;
 	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
 	m_moveMode = EnemyMoveMode::Normal;
 	m_speed = RandomRange(ENEMY_SPEED_MIN * 0.5f, ENEMY_SPEED_MAX * 0.6f);
+	PickRandomDirection(m_speed, m_vx, m_vy);
+}
+
+void Enemy::ResetTank(float x, float y, int hpMin, int hpMax)
+{
+	m_type = EnemyType::Tank;
+	m_x = x;
+	m_y = y;
+	m_radius = ENEMY_RADIUS * 1.15f;
+	m_attackCooldown = 0;
+	m_slowTimer = 0;
+	m_dotTimer = 0;
+	m_dotTickTimer = 0;
+	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
+
+	if (hpMax < hpMin)
+	{
+		hpMax = hpMin;
+	}
+	const int range = hpMax - hpMin + 1;
+	const int baseHp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
+	m_hp = baseHp + 35;
+	m_maxHp = m_hp;
+	m_justDied = false;
+	m_moveMode = EnemyMoveMode::Normal;
+	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 0.7f;
+	PickRandomDirection(m_speed, m_vx, m_vy);
+}
+
+void Enemy::ResetAssault(float x, float y, int hpMin, int hpMax)
+{
+	m_type = EnemyType::Assault;
+	m_x = x;
+	m_y = y;
+	m_radius = ENEMY_RADIUS * 0.85f;
+	m_attackCooldown = 0;
+	m_slowTimer = 0;
+	m_dotTimer = 0;
+	m_dotTickTimer = 0;
+	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
+
+	if (hpMax < hpMin)
+	{
+		hpMax = hpMin;
+	}
+	const int range = hpMax - hpMin + 1;
+	const int baseHp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
+	m_hp = (int)(baseHp * 0.4f);
+	if (m_hp < 1) m_hp = 1;
+	m_maxHp = m_hp;
+	m_justDied = false;
+	m_moveMode = EnemyMoveMode::Normal;
+	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 1.25f;
+	PickRandomDirection(m_speed, m_vx, m_vy);
+}
+
+void Enemy::ResetMedic(float x, float y, int hpMin, int hpMax)
+{
+	m_type = EnemyType::Medic;
+	m_x = x;
+	m_y = y;
+	m_radius = ENEMY_RADIUS;
+	m_attackCooldown = 0;
+	m_slowTimer = 0;
+	m_dotTimer = 0;
+	m_dotTickTimer = 0;
+	m_dotDamagePerTick = 0;
+	m_healTimer = 0;
+
+	if (hpMax < hpMin)
+	{
+		hpMax = hpMin;
+	}
+	const int range = hpMax - hpMin + 1;
+	m_hp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
+	m_maxHp = m_hp;
+	m_justDied = false;
+	m_moveMode = EnemyMoveMode::Normal;
+	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 0.9f;
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
@@ -174,6 +263,19 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 
 	TryShoot(playerX, playerY, attacks, maxAttacks);
 
+	// Assault type tracks towards player if normal movement
+	if (m_type == EnemyType::Assault && m_moveMode == EnemyMoveMode::Normal)
+	{
+		float dx = playerX - m_x;
+		float dy = playerY - m_y;
+		float len = sqrtf(dx * dx + dy * dy);
+		if (len > 0.1f)
+		{
+			m_vx = (dx / len) * m_speed;
+			m_vy = (dy / len) * m_speed;
+		}
+	}
+
 	// Apply slow effect
 	float speedMult = 1.0f;
 	if (m_slowTimer > 0)
@@ -228,9 +330,10 @@ void Enemy::TakeDamage(int amount)
 		return;
 	}
 	m_hp -= amount;
-	if (m_hp < 0)
+	if (m_hp <= 0)
 	{
 		m_hp = 0;
+		m_justDied = true;
 	}
 }
 
@@ -253,6 +356,31 @@ void Enemy::ApplyDot(int durationFrames, int damagePerSecond)
 	m_dotTimer = durationFrames;
 	m_dotTickTimer = 0;
 	m_dotDamagePerTick = damagePerSecond;
+}
+
+void Enemy::Heal(int amount)
+{
+	if (!IsAlive()) return;
+	m_hp += amount;
+	if (m_hp > m_maxHp)
+	{
+		m_hp = m_maxHp;
+	}
+}
+
+void Enemy::GuideTowards(float tx, float ty)
+{
+	if (m_type == EnemyType::Medic && m_moveMode == EnemyMoveMode::Normal)
+	{
+		float dx = tx - m_x;
+		float dy = ty - m_y;
+		float len = sqrtf(dx * dx + dy * dy);
+		if (len > 0.1f)
+		{
+			m_vx = (dx / len) * m_speed;
+			m_vy = (dy / len) * m_speed;
+		}
+	}
 }
 
 void Enemy::Draw() const
@@ -278,6 +406,21 @@ void Enemy::Draw() const
 		outlineColor = GetColor(120, 0, 0);
 		label = "BOSS";
 		break;
+	case EnemyType::Tank:
+		bodyColor = (m_moveMode == EnemyMoveMode::Flee) ? GetColor(170, 170, 170) : GetColor(110, 110, 110);
+		outlineColor = GetColor(50, 50, 50);
+		label = "TANK";
+		break;
+	case EnemyType::Assault:
+		bodyColor = (m_moveMode == EnemyMoveMode::Flee) ? GetColor(255, 180, 100) : GetColor(255, 120, 30);
+		outlineColor = GetColor(150, 60, 0);
+		label = "ASLT";
+		break;
+	case EnemyType::Medic:
+		bodyColor = (m_moveMode == EnemyMoveMode::Flee) ? GetColor(140, 255, 140) : GetColor(40, 200, 40);
+		outlineColor = GetColor(10, 100, 10);
+		label = "MEDC";
+		break;
 	default:
 		bodyColor = (m_moveMode == EnemyMoveMode::Flee)
 			? GetColor(255, 140, 140)
@@ -286,8 +429,16 @@ void Enemy::Draw() const
 		break;
 	}
 
-	DrawCircle((int)m_x, (int)m_y, (int)m_radius, bodyColor, TRUE);
-	DrawCircle((int)m_x, (int)m_y, (int)m_radius, outlineColor, FALSE);
+	if (m_type == EnemyType::Tank)
+	{
+		DrawBox((int)(m_x - m_radius), (int)(m_y - m_radius), (int)(m_x + m_radius), (int)(m_y + m_radius), bodyColor, TRUE);
+		DrawBox((int)(m_x - m_radius), (int)(m_y - m_radius), (int)(m_x + m_radius), (int)(m_y + m_radius), outlineColor, FALSE);
+	}
+	else
+	{
+		DrawCircle((int)m_x, (int)m_y, (int)m_radius, bodyColor, TRUE);
+		DrawCircle((int)m_x, (int)m_y, (int)m_radius, outlineColor, FALSE);
+	}
 
 	const int hpColor = GetColor(255, 255, 200);
 	DrawFormatString((int)m_x - 12, (int)m_y - (int)m_radius - 24, hpColor, "%d", m_hp);
