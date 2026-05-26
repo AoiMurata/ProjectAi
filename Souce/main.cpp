@@ -28,6 +28,9 @@ int WINAPI WinMain(
 	// Initialize DX Library
 	DxLib_Init();
 
+	// Enable mouse pointer display globally
+	SetMouseDispFlag(TRUE);
+
 	// -------------------------------------------------------------------------
 	// Window & Drawing Settings
 	// -------------------------------------------------------------------------

@@ -157,6 +157,7 @@
     <ClCompile Include="Souce\SkillPickScene.cpp" />
     <ClCompile Include="Souce\SceneManager.cpp" />
     <ClCompile Include="Souce\TitleScene.cpp" />
+    <ClCompile Include="Souce\Ally.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Souce\InputManager.h" />
@@ -173,6 +174,7 @@
     <ClInclude Include="Souce\SceneBase.h" />
     <ClInclude Include="Souce\SceneManager.h" />
     <ClInclude Include="Souce\TitleScene.h" />
+    <ClInclude Include="Souce\Ally.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

@@ -10,6 +10,7 @@
 #include "EnemyAttack.h"
 #include "IceProjectile.h"
 #include "PlayerSettings.h"
+#include "Ally.h"
 
 enum class MainPhase
 {
@@ -71,6 +72,7 @@ private:
 
 	MainPhase m_phase = MainPhase::Charge;
 	Player m_player;
+	Ally m_ally;
 	Enemy m_enemies[MAX_ENEMIES];
 	EnemyAttack m_enemyAttacks[MAX_ENEMY_ATTACKS];
 	IceProjectile m_iceShots[MAX_CHARGE_SHOTS];

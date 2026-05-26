@@ -13,8 +13,10 @@ struct IceProjectile
 	bool active = false;
 	bool homing = false;
 	bool isChain = false;
+	bool isAllyShot = false;
+	int lifetime = 0;
 
-	void Spawn(float fromX, float fromY, float targetX, float targetY, bool useHoming);
+	void Spawn(float fromX, float fromY, float targetX, float targetY, bool useHoming, bool allyShot = false);
 	void Update(float targetX, float targetY, bool hasTarget, float homingTurnRate);
 	void Draw() const;
 };

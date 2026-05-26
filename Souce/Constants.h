@@ -42,7 +42,7 @@ constexpr float ENEMY_SPEED_MIN  = 2.0f;
 constexpr float ENEMY_SPEED_MAX  = 7.0f;
 constexpr float ENEMY_FLEE_SPEED_MIN = 4.0f;
 constexpr float ENEMY_FLEE_SPEED_MAX = 9.0f;
-constexpr int   MAX_ENEMIES      = 50;
+constexpr int   MAX_ENEMIES      = 80;
 
 //	Boss constants
 constexpr int   MID_BOSS_BASE_HP = 100;

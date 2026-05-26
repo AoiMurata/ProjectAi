@@ -45,6 +45,16 @@ void MainScene::OnEnter()
 	m_skillCooldownTimer = 0;
 	m_currentSkillColor = PlayerSettings::GetSelectedPreset();
 
+	if (GameSession::GetRound() > 20)
+	{
+		m_ally.Reset(m_player.GetX() - 80.0f, m_player.GetY() + 40.0f);
+		m_ally.SetActive(true);
+	}
+	else
+	{
+		m_ally.SetActive(false);
+	}
+
 	// Reset skill visual variables
 	m_blackholeTimer = 0;
 	m_drawExplosion = false;
@@ -74,6 +84,10 @@ void MainScene::SpawnEnemies()
 
 	// Round increases enemy volume: start 7, +1 every 5 rounds
 	int totalEnemies = 7 + (round - 1) / 5;
+	if (round > 20)
+	{
+		totalEnemies = (int)(totalEnemies * 1.8f);
+	}
 	if (totalEnemies > MAX_ENEMIES)
 	{
 		totalEnemies = MAX_ENEMIES;
@@ -194,13 +208,54 @@ void MainScene::UpdateEnemies()
 {
 	const float px = m_player.GetX();
 	const float py = m_player.GetY();
-	const bool bhActive = m_skillActive && (m_currentSkillColor == ColorPreset::Black);
+
+	const bool pBHActive = m_skillActive && (m_currentSkillColor == ColorPreset::Black);
+	const bool aBHActive = m_ally.IsActive() && m_ally.IsBlackholeActive();
 
 	for (int i = 0; i < m_activeEnemyCount; ++i)
 	{
 		if (m_enemies[i].IsAlive())
 		{
-			m_enemies[i].Update(px, py, m_enemyAttacks, MAX_ENEMY_ATTACKS, bhActive, m_blackholeX, m_blackholeY);
+			bool bhActive = false;
+			float bhX = 0.0f;
+			float bhY = 0.0f;
+
+			if (pBHActive && aBHActive)
+			{
+				float pDx = m_blackholeX - m_enemies[i].GetX();
+				float pDy = m_blackholeY - m_enemies[i].GetY();
+				float pDistSq = pDx * pDx + pDy * pDy;
+
+				float aDx = m_ally.GetBlackholeX() - m_enemies[i].GetX();
+				float aDy = m_ally.GetBlackholeY() - m_enemies[i].GetY();
+				float aDistSq = aDx * aDx + aDy * aDy;
+
+				bhActive = true;
+				if (pDistSq < aDistSq)
+				{
+					bhX = m_blackholeX;
+					bhY = m_blackholeY;
+				}
+				else
+				{
+					bhX = m_ally.GetBlackholeX();
+					bhY = m_ally.GetBlackholeY();
+				}
+			}
+			else if (pBHActive)
+			{
+				bhActive = true;
+				bhX = m_blackholeX;
+				bhY = m_blackholeY;
+			}
+			else if (aBHActive)
+			{
+				bhActive = true;
+				bhX = m_ally.GetBlackholeX();
+				bhY = m_ally.GetBlackholeY();
+			}
+
+			m_enemies[i].Update(px, py, m_enemyAttacks, MAX_ENEMY_ATTACKS, bhActive, bhX, bhY);
 		}
 	}
 }
@@ -418,34 +473,64 @@ void MainScene::CheckIceEnemyCollisions()
 			if (CirclesOverlap(shot.x, shot.y, shot.radius,
 				enemy.GetX(), enemy.GetY(), enemy.GetRadius()))
 			{
-				enemy.TakeDamage(damage);
+				int finalDamage = damage;
+				if (shot.isAllyShot)
+				{
+					finalDamage = (int)(damage * 1.35f);
+					if (finalDamage < 1) finalDamage = 1;
+				}
+
+				enemy.TakeDamage(finalDamage);
 				enemy.OnHitByIce(m_player.GetX(), m_player.GetY());
 
 				// Apply E-Key Active skill hit effects
-				if (m_skillActive)
+				bool isSkillActive = false;
+				ColorPreset skillColor = ColorPreset::Blue;
+
+				if (shot.isAllyShot)
 				{
-					if (m_currentSkillColor == ColorPreset::Blue)
+					isSkillActive = m_ally.IsActive() && m_ally.IsSkillActive();
+					skillColor = m_ally.GetColorPreset();
+				}
+				else
+				{
+					isSkillActive = m_skillActive;
+					skillColor = m_currentSkillColor;
+				}
+
+				if (isSkillActive)
+				{
+					if (skillColor == ColorPreset::Blue)
 					{
 						enemy.ApplySlow(3 * TARGET_FPS); // Slow for 3 seconds
 					}
-					else if (m_currentSkillColor == ColorPreset::Pink)
+					else if (skillColor == ColorPreset::Pink)
 					{
-						// Deal same damage to all other alive enemies
+						// Deal same damage to other alive enemies within 200px of the hit enemy
+						float ex = enemy.GetX();
+						float ey = enemy.GetY();
+						const float pinkRadius = 200.0f;
 						for (int j = 0; j < m_activeEnemyCount; ++j)
 						{
 							Enemy& otherEnemy = m_enemies[j];
 							if (otherEnemy.IsAlive() && &otherEnemy != &enemy)
 							{
-								otherEnemy.TakeDamage(damage);
-								otherEnemy.OnHitByIce(m_player.GetX(), m_player.GetY());
+								float dx = otherEnemy.GetX() - ex;
+								float dy = otherEnemy.GetY() - ey;
+								float distSq = dx * dx + dy * dy;
+								if (distSq <= pinkRadius * pinkRadius)
+								{
+									otherEnemy.TakeDamage(finalDamage);
+									otherEnemy.OnHitByIce(m_player.GetX(), m_player.GetY());
+								}
 							}
 						}
 					}
-					else if (m_currentSkillColor == ColorPreset::Orange)
+					else if (skillColor == ColorPreset::Orange)
 					{
-						enemy.ApplyDot(3 * TARGET_FPS, damage); // DOT for 3 seconds
+						enemy.ApplyDot(3 * TARGET_FPS, finalDamage); // DOT for 3 seconds
 					}
-					else if (m_currentSkillColor == ColorPreset::Yellow && !shot.isChain)
+					else if (skillColor == ColorPreset::Yellow && !shot.isChain)
 					{
 						// Chain: Find the nearest OTHER alive enemy to bounce to
 						const Enemy* nextTarget = nullptr;
@@ -474,7 +559,7 @@ void MainScene::CheckIceEnemyCollisions()
 							{
 								if (!chainShot.active)
 								{
-									chainShot.Spawn(shot.x, shot.y, nextTarget->GetX(), nextTarget->GetY(), GameSession::HasHoming());
+									chainShot.Spawn(shot.x, shot.y, nextTarget->GetX(), nextTarget->GetY(), GameSession::HasHoming(), shot.isAllyShot);
 									chainShot.isChain = true; // Mark as chain shot so it doesn't bounce endlessly
 									break;
 								}
@@ -532,7 +617,7 @@ bool MainScene::AnyActiveIce() const
 {
 	for (const auto& shot : m_iceShots)
 	{
-		if (shot.active)
+		if (shot.active && !shot.isAllyShot)
 		{
 			return true;
 		}
@@ -569,6 +654,11 @@ bool MainScene::CirclesOverlap(float x1, float y1, float r1, float x2, float y2,
 
 SceneType MainScene::UpdateBattlePhase()
 {
+	if (m_ally.IsActive())
+	{
+		m_ally.Update(m_player.GetX(), m_player.GetY(), m_enemies, m_activeEnemyCount, m_iceShots, GameSession::GetMaxChargeShots(), m_enemyAttacks, MAX_ENEMY_ATTACKS);
+	}
+
 	// Update active skill cooldown
 	if (m_skillCooldownTimer > 0)
 	{
@@ -883,7 +973,23 @@ void MainScene::Draw()
 		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 	}
 
+	if (m_ally.IsActive() && m_ally.IsBlackholeActive())
+	{
+		const float rad = 80.0f + sinf((float)m_ally.GetSkillActiveTimer() * 0.15f) * 10.0f;
+		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 180);
+		DrawCircle((int)m_ally.GetBlackholeX(), (int)m_ally.GetBlackholeY(), (int)rad, GetColor(20, 10, 35), TRUE);
+		DrawCircle((int)m_ally.GetBlackholeX(), (int)m_ally.GetBlackholeY(), (int)rad, GetColor(130, 60, 210), FALSE);
+		DrawCircle((int)m_ally.GetBlackholeX(), (int)m_ally.GetBlackholeY(), (int)(rad * 0.65f), GetColor(10, 5, 20), TRUE);
+		DrawCircle((int)m_ally.GetBlackholeX(), (int)m_ally.GetBlackholeY(), (int)(rad * 0.3f), GetColor(0, 0, 0), TRUE);
+		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	}
+
 	m_player.Draw();
+
+	if (m_ally.IsActive())
+	{
+		m_ally.Draw();
+	}
 
 	for (int i = 0; i < m_activeEnemyCount; ++i)
 	{
@@ -908,6 +1014,14 @@ void MainScene::Draw()
 		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 140);
 		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 110, 30), TRUE);
 		DrawCircle((int)m_explosionX, (int)m_explosionY, (int)m_explosionDrawRadius, GetColor(255, 220, 90), FALSE);
+		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
+	}
+
+	if (m_ally.IsActive() && m_ally.IsExplosionActive())
+	{
+		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 140);
+		DrawCircle((int)m_ally.GetExplosionX(), (int)m_ally.GetExplosionY(), (int)m_ally.GetExplosionRadius(), GetColor(255, 110, 30), TRUE);
+		DrawCircle((int)m_ally.GetExplosionX(), (int)m_ally.GetExplosionY(), (int)m_ally.GetExplosionRadius(), GetColor(255, 220, 90), FALSE);
 		SetDrawBlendMode(DX_BLENDMODE_NOBLEND, 0);
 	}
 
@@ -1013,6 +1127,65 @@ void MainScene::Draw()
 		}
 
 		DrawFormatString(SCREEN_WIDTH - 300, 205, GetColor(160, 170, 180), "%s", sDesc);
+
+		// 3.5. Draw Ally NPC Skill HUD
+		if (m_ally.IsActive())
+		{
+			const ColorPreset allyPreset = m_ally.GetColorPreset();
+			int aDur, aCd;
+			const char* aName;
+			const char* aDesc;
+			GetActiveSkillDetails(allyPreset, aDur, aCd, aName, aDesc);
+
+			DrawFormatString(SCREEN_WIDTH - 300, 230, GetColor(200, 220, 240), "------------------------");
+			DrawFormatString(SCREEN_WIDTH - 300, 250, GetColor(180, 230, 200), "Ally Skill: %s", aName);
+
+			int aBarX = SCREEN_WIDTH - 300;
+			int aBarY = 275;
+			int aBarW = 240;
+			int aBarH = 20;
+
+			DrawBox(aBarX, aBarY, aBarX + aBarW, aBarY + aBarH, GetColor(40, 50, 65), TRUE);
+			DrawBox(aBarX, aBarY, aBarX + aBarW, aBarY + aBarH, GetColor(80, 100, 125), FALSE);
+
+			if (m_ally.IsSkillActive())
+			{
+				float progress = (float)m_ally.GetSkillActiveTimer() / (float)aDur;
+				if (progress < 0.0f) progress = 0.0f;
+				if (progress > 1.0f) progress = 1.0f;
+
+				int fillW = (int)(progress * aBarW);
+				int activeColor = PlayerSettings::GetPresetBodyColor(allyPreset);
+				DrawBox(aBarX + 2, aBarY + 2, aBarX + 2 + fillW - 4, aBarY + aBarH - 2, activeColor, TRUE);
+
+				const float sec = (float)m_ally.GetSkillActiveTimer() / (float)TARGET_FPS;
+				DrawFormatString(aBarX + 10, aBarY + 3, GetColor(255, 255, 255), "ACTIVE (%.1fs left)", sec);
+			}
+			else if (m_ally.GetSkillCooldownTimer() > 0)
+			{
+				float progress = 1.0f - (float)m_ally.GetSkillCooldownTimer() / (float)aCd;
+				if (progress < 0.0f) progress = 0.0f;
+				if (progress > 1.0f) progress = 1.0f;
+
+				int fillW = (int)(progress * aBarW);
+				DrawBox(aBarX + 2, aBarY + 2, aBarX + 2 + fillW - 4, aBarY + aBarH - 2, GetColor(110, 110, 110), TRUE);
+
+				const float sec = (float)m_ally.GetSkillCooldownTimer() / (float)TARGET_FPS;
+				DrawFormatString(aBarX + 10, aBarY + 3, GetColor(200, 200, 200), "COOLDOWN (%.1fs left)", sec);
+			}
+			else
+			{
+				static int aGlowFrame = 0;
+				++aGlowFrame;
+				const float glow = sinf((float)aGlowFrame * 0.1f) * 0.5f + 0.5f;
+				const int readyColor = GetColor((int)(100 + glow * 50), (int)(180 + glow * 40), (int)(220 + glow * 35));
+				DrawBox(aBarX + 2, aBarY + 2, aBarX + aBarW - 2, aBarY + aBarH - 2, readyColor, TRUE);
+
+				DrawFormatString(aBarX + 10, aBarY + 3, GetColor(255, 255, 255), "READY (Auto Cast)");
+			}
+
+			DrawFormatString(SCREEN_WIDTH - 300, 305, GetColor(160, 170, 180), "%s", aDesc);
+		}
 	}
 
 	if (m_stunFrames > 0)
@@ -1129,7 +1302,7 @@ void MainScene::GetActiveSkillDetails(ColorPreset preset, int& outDuration, int&
 		outDuration = 1 * TARGET_FPS;
 		outCooldown = 13 * TARGET_FPS;
 		outName = "Shared Pain";
-		outDesc = "Hits damage all enemies";
+		outDesc = "Hits damage nearby enemies";
 		break;
 	case ColorPreset::Orange:
 		outDuration = 2 * TARGET_FPS;

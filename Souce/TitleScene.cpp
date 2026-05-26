@@ -359,6 +359,9 @@ SceneType TitleScene::UpdateColorCustomize()
 		m_mode = TitleScreenMode::MainMenu;
 	}
 
+	// Apply preset continuously in customization screen so preview updates in real-time
+	PlayerSettings::ApplyPreset((ColorPreset)m_colorIndex);
+
 	return SceneType::None;
 }
 
@@ -458,7 +461,7 @@ void GetColorSkillText(ColorPreset preset, const char*& outName, const char*& ou
 		break;
 	case ColorPreset::Pink:
 		outName = "Shared Pain";
-		outDesc = "E-key: Attacks share damage to all enemies for 1s.";
+		outDesc = "E-key: Attacks share damage to nearby enemies for 1s.";
 		outCd = "Cooldown: 13s";
 		break;
 	case ColorPreset::Orange:

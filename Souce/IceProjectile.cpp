@@ -6,7 +6,7 @@
 #include "DxLib.h"
 #include <cmath>
 
-void IceProjectile::Spawn(float fromX, float fromY, float targetX, float targetY, bool useHoming)
+void IceProjectile::Spawn(float fromX, float fromY, float targetX, float targetY, bool useHoming, bool allyShot)
 {
 	x = fromX;
 	y = fromY;
@@ -14,6 +14,8 @@ void IceProjectile::Spawn(float fromX, float fromY, float targetX, float targetY
 	active = true;
 	homing = useHoming;
 	isChain = false;
+	isAllyShot = allyShot;
+	lifetime = 0;
 
 	float dx = targetX - fromX;
 	float dy = targetY - fromY;
@@ -37,6 +39,15 @@ void IceProjectile::Update(float targetX, float targetY, bool hasTarget, float h
 {
 	if (!active)
 	{
+		return;
+	}
+
+	++lifetime;
+
+	// Despawn homing bullets after 2 seconds (120 frames) to optimize performance and prevent lag
+	if (homing && lifetime >= 120)
+	{
+		active = false;
 		return;
 	}
 
@@ -72,8 +83,15 @@ void IceProjectile::Draw() const
 		return;
 	}
 
-	const int iceColor = homing ? GetColor(140, 220, 255) : GetColor(180, 240, 255);
-	const int coreColor = GetColor(255, 255, 255);
+	int iceColor = homing ? GetColor(140, 220, 255) : GetColor(180, 240, 255);
+	int coreColor = GetColor(255, 255, 255);
+
+	if (isAllyShot)
+	{
+		// Distinctive premium light emerald hue for Ally's shots
+		iceColor = GetColor(150, 240, 190);
+		coreColor = GetColor(230, 255, 240);
+	}
 
 	DrawCircle((int)x, (int)y, (int)radius, iceColor, TRUE);
 	DrawCircle((int)x, (int)y, (int)(radius * 0.45f), coreColor, TRUE);
