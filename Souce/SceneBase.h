@@ -1,38 +1,39 @@
-// =============================================================================
+﻿// =============================================================================
 // SceneBase.h
-// Abstract base class for all scenes (Title, Main, Result)
-// [To add a new scene] Inherit from this class when creating a new scene.
+// すべてのシーン（タイトル、メインゲーム、リザルト等）の共通の抽象基底クラス定義
+// 【新しいシーンを追加する場合】新シーンのクラスはこのクラスを継承して作成します。
 // =============================================================================
 #pragma once
 
-// Enum representing the type of scene
-// Used by SceneManager to determine which scene to transition to next
+// シーンの種類（遷移先判定用）
+// SceneManagerが次のシーンへ切り替える際に判別する値として使用します
 enum class SceneType
 {
-	Title,     // Title screen
-	Main,      // Main game screen
-	SkillPick, // Pick a skill upgrade after clearing a round
-	Result,    // Game over / final results
-	QuitApp,   // Exit application
-	None       // No transition (continue current scene)
+	Title,     // タイトル画面
+	Main,      // メインゲーム画面（戦闘）
+	SkillPick, // ラウンドクリア後のスキル選択画面
+	Result,    // ゲームオーバーおよび最終成績（リザルト）画面
+	QuitApp,   // アプリケーション終了
+	None       // 画面遷移なし（現在のシーンを継続）
 };
 
-// Common interface for all scenes (pure virtual functions)
+// シーン共通のインターフェース（純粋仮想関数を定義）
 class SceneBase
 {
 public:
+	// 仮想デストラクタ
 	virtual ~SceneBase() = default;
 
-	// Called once immediately after entering the scene (for initialization)
+	// シーン開始時に一度だけ自動で呼び出される初期化処理
 	virtual void OnEnter() {}
 
-	// Called once immediately before exiting the scene (for cleanup)
+	// シーン終了時に一度だけ自動で呼び出されるクリーンアップ処理
 	virtual void OnExit() {}
 
-	// Update logic called every frame
-	// Return value: The scene to transition to next. SceneType::None if no transition.
+	// 毎フレームのロジック更新処理
+	// 戻り値: 遷移先のシーン。切り替えない場合は SceneType::None を返す
 	virtual SceneType Update() = 0;
 
-	// Drawing logic called every frame
+	// 毎フレームの描画処理
 	virtual void Draw() = 0;
 };

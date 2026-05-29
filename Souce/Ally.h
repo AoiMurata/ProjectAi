@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // Ally.h
 // =============================================================================
 #pragma once
@@ -22,17 +22,17 @@ public:
 	float GetRadius() const { return m_radius; }
 	ColorPreset GetColorPreset() const { return m_color; }
 
-	// Active skill getters
+	// アクティブスキルのゲッター
 	bool IsSkillActive() const { return m_skillActive; }
 	int GetSkillActiveTimer() const { return m_skillActiveTimer; }
 	int GetSkillCooldownTimer() const { return m_skillCooldownTimer; }
 	
-	// Blackhole pull variables
+	// ブラックホールの引き込み用変数
 	float GetBlackholeX() const { return m_blackholeX; }
 	float GetBlackholeY() const { return m_blackholeY; }
 	bool IsBlackholeActive() const { return m_skillActive && (m_color == ColorPreset::Black); }
 
-	// Explosion parameters
+	// 爆発エフェクト用のパラメータ
 	bool IsExplosionActive() const { return m_drawExplosion; }
 	float GetExplosionX() const { return m_explosionX; }
 	float GetExplosionY() const { return m_explosionY; }
@@ -52,20 +52,20 @@ private:
 	ColorPreset m_color = ColorPreset::Blue;
 	bool m_active = false;
 
-	// Free-spirited autonomous destination AI parameters
+	// 自律移動AI用の目標座標パラメータ
 	float m_destX = 0.0f;
 	float m_destY = 0.0f;
 	int m_destTimer = 0;
 
-	// Shooting Cooldown
+	// 射撃のクールダウン
 	int m_autoFireCooldown = 0;
 
-	// Skill Cooldowns
+	// スキルのアクティブ・クールダウン用タイマー
 	bool m_skillActive = false;
 	int m_skillActiveTimer = 0;
 	int m_skillCooldownTimer = 0;
 
-	// Skill visual params
+	// スキル演出用のパラメータ
 	float m_blackholeX = 0.0f;
 	float m_blackholeY = 0.0f;
 	

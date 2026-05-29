@@ -1,5 +1,6 @@
-// =============================================================================
+﻿// =============================================================================
 // Enemy.cpp
+// 各種敵キャラクターの挙動、移動AI、ダメージ・ステータス更新処理の実装ファイル
 // =============================================================================
 #include "Enemy.h"
 #include "Constants.h"
@@ -8,6 +9,7 @@
 
 namespace
 {
+	// 指定範囲内のランダムな浮動小数点数を返すヘルパー関数
 	float RandomRange(float minVal, float maxVal)
 	{
 		if (maxVal <= minVal)
@@ -19,6 +21,7 @@ namespace
 		return minVal + (maxVal - minVal) * ((float)roll / (float)steps);
 	}
 
+	// 指定されたスピードで、ランダムな方向の速度ベクトル（vx, vy）を生成する
 	void PickRandomDirection(float speed, float& outVx, float& outVy)
 	{
 		const float angle = RandomRange(0.0f, 6.2831853f);
@@ -27,18 +30,21 @@ namespace
 	}
 }
 
+// 敵の徘徊速度と方向をランダムに再選択する
 void Enemy::PickRandomVelocity()
 {
 	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX);
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// 被弾逃走などの状態から、通常のランダム徘徊移動に戻す
 void Enemy::ReturnToNormalMovement()
 {
 	m_moveMode = EnemyMoveMode::Normal;
 	PickRandomVelocity();
 }
 
+// 指定した座標から遠ざかる（逃走する）移動ベクトルを設定する
 void Enemy::StartFleeFrom(float fromX, float fromY)
 {
 	float dx = m_x - fromX;
@@ -57,12 +63,14 @@ void Enemy::StartFleeFrom(float fromX, float fromY)
 		dy /= len;
 	}
 
+	// 逃走用のスピード範囲から速度を設定し、逃走移動モードに変更
 	m_speed = RandomRange(ENEMY_FLEE_SPEED_MIN, ENEMY_FLEE_SPEED_MAX);
 	m_vx = dx * m_speed;
 	m_vy = dy * m_speed;
 	m_moveMode = EnemyMoveMode::Flee;
 }
 
+// 通常の敵の初期化処理
 void Enemy::ResetNormal(float x, float y, int hpMin, int hpMax)
 {
 	m_type = EnemyType::Normal;
@@ -88,6 +96,7 @@ void Enemy::ResetNormal(float x, float y, int hpMin, int hpMax)
 	PickRandomVelocity();
 }
 
+// 中ボスの初期化処理
 void Enemy::ResetMidBoss(float x, float y, int hp)
 {
 	m_type = EnemyType::MidBoss;
@@ -97,7 +106,7 @@ void Enemy::ResetMidBoss(float x, float y, int hp)
 	m_hp = hp;
 	m_maxHp = hp;
 	m_justDied = false;
-	m_attackCooldown = 30;
+	m_attackCooldown = 30; // 出現直後の攻撃待機フレーム
 	m_slowTimer = 0;
 	m_dotTimer = 0;
 	m_dotTickTimer = 0;
@@ -108,6 +117,7 @@ void Enemy::ResetMidBoss(float x, float y, int hp)
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// 大ボスの初期化処理
 void Enemy::ResetBoss(float x, float y, int hp)
 {
 	m_type = EnemyType::Boss;
@@ -117,7 +127,7 @@ void Enemy::ResetBoss(float x, float y, int hp)
 	m_hp = hp;
 	m_maxHp = hp;
 	m_justDied = false;
-	m_attackCooldown = 20;
+	m_attackCooldown = 20; // 出現直後の攻撃待機フレーム
 	m_slowTimer = 0;
 	m_dotTimer = 0;
 	m_dotTickTimer = 0;
@@ -128,12 +138,13 @@ void Enemy::ResetBoss(float x, float y, int hp)
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// タンクタイプの敵の初期化処理
 void Enemy::ResetTank(float x, float y, int hpMin, int hpMax)
 {
 	m_type = EnemyType::Tank;
 	m_x = x;
 	m_y = y;
-	m_radius = ENEMY_RADIUS * 1.15f;
+	m_radius = ENEMY_RADIUS * 1.15f; // 通常より少し大きめのサイズ
 	m_attackCooldown = 0;
 	m_slowTimer = 0;
 	m_dotTimer = 0;
@@ -147,20 +158,21 @@ void Enemy::ResetTank(float x, float y, int hpMin, int hpMax)
 	}
 	const int range = hpMax - hpMin + 1;
 	const int baseHp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
-	m_hp = baseHp + 35;
+	m_hp = baseHp + 35; // 高い耐久力（HPボーナス）
 	m_maxHp = m_hp;
 	m_justDied = false;
 	m_moveMode = EnemyMoveMode::Normal;
-	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 0.7f;
+	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 0.7f; // 移動スピードはやや遅め
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// アサルトタイプの敵の初期化処理
 void Enemy::ResetAssault(float x, float y, int hpMin, int hpMax)
 {
 	m_type = EnemyType::Assault;
 	m_x = x;
 	m_y = y;
-	m_radius = ENEMY_RADIUS * 0.85f;
+	m_radius = ENEMY_RADIUS * 0.85f; // 通常より少し小さめのサイズ
 	m_attackCooldown = 0;
 	m_slowTimer = 0;
 	m_dotTimer = 0;
@@ -174,15 +186,16 @@ void Enemy::ResetAssault(float x, float y, int hpMin, int hpMax)
 	}
 	const int range = hpMax - hpMin + 1;
 	const int baseHp = (range > 1) ? (GetRand(range) + hpMin) : hpMin;
-	m_hp = (int)(baseHp * 0.4f);
+	m_hp = (int)(baseHp * 0.4f); // 耐久力は低め
 	if (m_hp < 1) m_hp = 1;
 	m_maxHp = m_hp;
 	m_justDied = false;
 	m_moveMode = EnemyMoveMode::Normal;
-	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 1.25f;
+	m_speed = RandomRange(ENEMY_SPEED_MIN, ENEMY_SPEED_MAX) * 1.25f; // 高速で移動
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// メディックタイプの敵の初期化処理
 void Enemy::ResetMedic(float x, float y, int hpMin, int hpMax)
 {
 	m_type = EnemyType::Medic;
@@ -209,11 +222,13 @@ void Enemy::ResetMedic(float x, float y, int hpMin, int hpMax)
 	PickRandomDirection(m_speed, m_vx, m_vy);
 }
 
+// ボス系キャラクターであるかを判定する（中ボス・大ボスが対象）
 bool Enemy::IsBossType() const
 {
 	return m_type == EnemyType::MidBoss || m_type == EnemyType::Boss;
 }
 
+// ボス系が弾攻撃を試行する処理
 void Enemy::TryShoot(float playerX, float playerY, EnemyAttack* attacks, int maxAttacks)
 {
 	if (!IsBossType() || !IsAlive())
@@ -221,16 +236,19 @@ void Enemy::TryShoot(float playerX, float playerY, EnemyAttack* attacks, int max
 		return;
 	}
 
+	// クールダウン中の場合はタイマーを進めて終了
 	if (m_attackCooldown > 0)
 	{
 		--m_attackCooldown;
 		return;
 	}
 
+	// 敵の種類に応じて攻撃間隔を選択
 	const int interval = (m_type == EnemyType::Boss)
 		? BOSS_ATTACK_INTERVAL
 		: MID_BOSS_ATTACK_INTERVAL;
 
+	// 空いている攻撃バッファを見つけ、プレイヤー座標へ向けて射撃
 	for (int i = 0; i < maxAttacks; ++i)
 	{
 		if (!attacks[i].active)
@@ -242,6 +260,7 @@ void Enemy::TryShoot(float playerX, float playerY, EnemyAttack* attacks, int max
 	}
 }
 
+// 敵キャラクターの毎フレーム更新処理
 void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAttacks, bool hasBlackhole, float bhX, float bhY)
 {
 	if (!IsAlive())
@@ -249,21 +268,22 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 		return;
 	}
 
-	// Update DOT ticks
+	// ドットダメージ（継続ダメージ）の更新
 	if (m_dotTimer > 0)
 	{
 		--m_dotTimer;
 		++m_dotTickTimer;
-		if (m_dotTickTimer >= 60) // Ticks once every 1 second
+		if (m_dotTickTimer >= 60) // 60フレーム（約1秒）に1回ダメージを適用
 		{
 			TakeDamage(m_dotDamagePerTick);
 			m_dotTickTimer = 0;
 		}
 	}
 
+	// ボス系射撃処理の試行
 	TryShoot(playerX, playerY, attacks, maxAttacks);
 
-	// Assault type tracks towards player if normal movement
+	// アサルトタイプは、通常移動時に常にプレイヤーの座標を追尾する
 	if (m_type == EnemyType::Assault && m_moveMode == EnemyMoveMode::Normal)
 	{
 		float dx = playerX - m_x;
@@ -276,18 +296,19 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 		}
 	}
 
-	// Apply slow effect
+	// スロウ効果による移動速度制限の適用
 	float speedMult = 1.0f;
 	if (m_slowTimer > 0)
 	{
 		--m_slowTimer;
-		speedMult = 0.4f; // 60% slow down
+		speedMult = 0.4f; // 移動速度を60%カット（0.4倍速）
 	}
 
+	// 座標の更新
 	m_x += m_vx * speedMult;
 	m_y += m_vy * speedMult;
 
-	// Pull toward black hole gravity center if active
+	// ブラックホール吸引スキルの影響下にあれば、その中心点へ向けて引き寄せる
 	if (hasBlackhole)
 	{
 		float dx = bhX - m_x;
@@ -297,11 +318,12 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 		{
 			dx /= dist;
 			dy /= dist;
-			m_x += dx * 3.5f; // Pull speed
+			m_x += dx * 3.5f; // 引き寄せ速度
 			m_y += dy * 3.5f;
 		}
 	}
 
+	// 画面境界での衝突・跳ね返り処理
 	const float margin = m_radius;
 	bool hitWall = false;
 
@@ -310,6 +332,7 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 	if (m_y < margin) { m_y = margin; hitWall = true; }
 	else if (m_y > SCREEN_HEIGHT - margin) { m_y = SCREEN_HEIGHT - margin; hitWall = true; }
 
+	// 壁に当たった場合、逃走モードなら通常徘徊に戻し、通常状態なら新しいランダム移動ベクトルを選択
 	if (hitWall)
 	{
 		if (m_moveMode == EnemyMoveMode::Flee)
@@ -323,6 +346,7 @@ void Enemy::Update(float playerX, float playerY, EnemyAttack* attacks, int maxAt
 	}
 }
 
+// ダメージを受ける処理
 void Enemy::TakeDamage(int amount)
 {
 	if (m_hp <= 0)
@@ -333,10 +357,11 @@ void Enemy::TakeDamage(int amount)
 	if (m_hp <= 0)
 	{
 		m_hp = 0;
-		m_justDied = true;
+		m_justDied = true; // 死亡エフェクト発動用フラグを設定
 	}
 }
 
+// 氷弾が命中した際の処理（命中地点から逆方向へ逃走）
 void Enemy::OnHitByIce(float fromX, float fromY)
 {
 	if (!IsAlive())
@@ -346,11 +371,13 @@ void Enemy::OnHitByIce(float fromX, float fromY)
 	StartFleeFrom(fromX, fromY);
 }
 
+// スロウ効果時間を設定する
 void Enemy::ApplySlow(int durationFrames)
 {
 	m_slowTimer = durationFrames;
 }
 
+// 継続ダメージを設定する
 void Enemy::ApplyDot(int durationFrames, int damagePerSecond)
 {
 	m_dotTimer = durationFrames;
@@ -358,16 +385,18 @@ void Enemy::ApplyDot(int durationFrames, int damagePerSecond)
 	m_dotDamagePerTick = damagePerSecond;
 }
 
+// 回復を受ける処理
 void Enemy::Heal(int amount)
 {
 	if (!IsAlive()) return;
 	m_hp += amount;
 	if (m_hp > m_maxHp)
 	{
-		m_hp = m_maxHp;
+		m_hp = m_maxHp; // 最大HPを超えないようにクリップ
 	}
 }
 
+// メディック用の目的地追跡処理（味方の座標へ向かって移動方向を固定する）
 void Enemy::GuideTowards(float tx, float ty)
 {
 	if (m_type == EnemyType::Medic && m_moveMode == EnemyMoveMode::Normal)
@@ -383,6 +412,7 @@ void Enemy::GuideTowards(float tx, float ty)
 	}
 }
 
+// 敵キャラクターの描画
 void Enemy::Draw() const
 {
 	if (!IsAlive())
@@ -394,6 +424,7 @@ void Enemy::Draw() const
 	int outlineColor;
 	const char* label = nullptr;
 
+	// 敵の種類や移動モードに合わせて配色とラベルテキストを設定
 	switch (m_type)
 	{
 	case EnemyType::MidBoss:
@@ -429,6 +460,7 @@ void Enemy::Draw() const
 		break;
 	}
 
+	// タンクタイプは頑強さを表すために四角形で描画し、それ以外は円形で描画する
 	if (m_type == EnemyType::Tank)
 	{
 		DrawBox((int)(m_x - m_radius), (int)(m_y - m_radius), (int)(m_x + m_radius), (int)(m_y + m_radius), bodyColor, TRUE);
@@ -440,9 +472,11 @@ void Enemy::Draw() const
 		DrawCircle((int)m_x, (int)m_y, (int)m_radius, outlineColor, FALSE);
 	}
 
+	// HPの値をキャラクターの頭上にテキスト表示
 	const int hpColor = GetColor(255, 255, 200);
 	DrawFormatString((int)m_x - 12, (int)m_y - (int)m_radius - 24, hpColor, "%d", m_hp);
 
+	// ボスや特殊敵の種別を示すラベル名表示
 	if (label != nullptr)
 	{
 		DrawFormatString((int)m_x - 18, (int)m_y + (int)m_radius + 4,

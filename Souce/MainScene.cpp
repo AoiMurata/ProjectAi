@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // MainScene.cpp
 // =============================================================================
 #include "MainScene.h"
@@ -483,7 +483,7 @@ void MainScene::CheckIceEnemyCollisions()
 				enemy.TakeDamage(finalDamage);
 				enemy.OnHitByIce(m_player.GetX(), m_player.GetY());
 
-				// Apply E-Key Active skill hit effects
+				// Eキーのアクティブスキル命中効果を適用
 				bool isSkillActive = false;
 				ColorPreset skillColor = ColorPreset::Blue;
 
@@ -502,11 +502,11 @@ void MainScene::CheckIceEnemyCollisions()
 				{
 					if (skillColor == ColorPreset::Blue)
 					{
-						enemy.ApplySlow(3 * TARGET_FPS); // Slow for 3 seconds
+						enemy.ApplySlow(3 * TARGET_FPS); // 3秒間スロウを付与
 					}
 					else if (skillColor == ColorPreset::Pink)
 					{
-						// Deal same damage to other alive enemies within 200px of the hit enemy
+						// 被弾した敵から200px以内にいる生存中の他の敵に同等のダメージを与える
 						float ex = enemy.GetX();
 						float ey = enemy.GetY();
 						const float pinkRadius = 200.0f;
@@ -528,11 +528,11 @@ void MainScene::CheckIceEnemyCollisions()
 					}
 					else if (skillColor == ColorPreset::Orange)
 					{
-						enemy.ApplyDot(3 * TARGET_FPS, finalDamage); // DOT for 3 seconds
+						enemy.ApplyDot(3 * TARGET_FPS, finalDamage); // 3秒間継続ダメージ（DOT）を付与
 					}
 					else if (skillColor == ColorPreset::Yellow && !shot.isChain)
 					{
-						// Chain: Find the nearest OTHER alive enemy to bounce to
+						// チェイン：跳ね返り先となる生存している最も近い「他の」敵を検索
 						const Enemy* nextTarget = nullptr;
 						float nextBestDistSq = 0.0f;
 						for (int j = 0; j < m_activeEnemyCount; ++j)
@@ -554,13 +554,13 @@ void MainScene::CheckIceEnemyCollisions()
 
 						if (nextTarget != nullptr)
 						{
-							// Spawn chain shot
+							// チェインショットをスポーン
 							for (auto& chainShot : m_iceShots)
 							{
 								if (!chainShot.active)
 								{
 									chainShot.Spawn(shot.x, shot.y, nextTarget->GetX(), nextTarget->GetY(), GameSession::HasHoming(), shot.isAllyShot);
-									chainShot.isChain = true; // Mark as chain shot so it doesn't bounce endlessly
+									chainShot.isChain = true; // 無限に跳ね返るのを防ぐため、チェインショットとしてマーク
 									break;
 								}
 							}
@@ -961,7 +961,7 @@ void MainScene::Draw()
 {
 	SetBackgroundColor(40, 50, 70);
 
-	// 1. Draw Black Hole gravity singularity underneath entities
+	// 1. キャラクターの下にブラックホールの重力特異点を描画
 	if (m_skillActive && m_currentSkillColor == ColorPreset::Black)
 	{
 		const float rad = 80.0f + sinf((float)m_skillActiveTimer * 0.15f) * 10.0f;
@@ -1008,7 +1008,7 @@ void MainScene::Draw()
 		}
 	}
 
-	// 2. Draw self-explosion blast ring if active
+	// 2. 自己爆発のアクティブ時にブラストリングを描画
 	if (m_drawExplosion)
 	{
 		SetDrawBlendMode(DX_BLENDMODE_ALPHA, 140);
@@ -1069,7 +1069,7 @@ void MainScene::Draw()
 			"Homing Lv.%d", GameSession::GetSpecialSkillLevel(SpecialSkillType::Homing));
 	}
 
-	// 3. Draw Active Skill HUD in Battle Phase
+	// 3. バトルフェーズ中にアクティブスキルのHUDを描画
 	if (m_phase == MainPhase::Battle)
 	{
 		const ColorPreset currentPreset = PlayerSettings::GetSelectedPreset();
@@ -1081,7 +1081,7 @@ void MainScene::Draw()
 		DrawFormatString(SCREEN_WIDTH - 300, 130, GetColor(200, 220, 240), "------------------------");
 		DrawFormatString(SCREEN_WIDTH - 300, 150, GetColor(180, 200, 230), "Skill [E]: %s", sName);
 
-		// Skill progress bar
+		// スキルの進行状況バー
 		int barX = SCREEN_WIDTH - 300;
 		int barY = 175;
 		int barW = 240;
@@ -1128,7 +1128,7 @@ void MainScene::Draw()
 
 		DrawFormatString(SCREEN_WIDTH - 300, 205, GetColor(160, 170, 180), "%s", sDesc);
 
-		// 3.5. Draw Ally NPC Skill HUD
+		// 3.5. 味方NPCのスキルHUDを描画
 		if (m_ally.IsActive())
 		{
 			const ColorPreset allyPreset = m_ally.GetColorPreset();

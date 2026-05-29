@@ -1,11 +1,7 @@
-﻿
-/*
-
-キー入力に関する補助関数
-DXLibに存在しないので自作
-
-*/
-
+﻿// =============================================================================
+// InputManager.cpp
+// キーボード・マウスの各入力エッジ検知（トリガー・リリース）処理の実装ファイル
+// =============================================================================
 #include "InputManager.h"
 #include "DxLib.h"
 
@@ -23,93 +19,91 @@ InputManager::InputManager()
 // デストラクタ
 InputManager::~InputManager()
 {
-
 }
 
-
+// キーが押された瞬間を検知する
 int InputManager::CheckDownKey(int KeyCode)
 {
-	// 戻り値用の変数を用意
 	int result = 0;
 
-	// 指定キーの現在の状態を取得
+	// 指定されたキーの現在の入力を取得 (1: 押されている, 0: 離されている)
 	int keyState = CheckHitKey(KeyCode);
 
-	// 前回キーが押されておらず、かつ、現在キーが押されていたら「キーを押した瞬間」とする
-	if(mDownBuffer[KeyCode] == 0 && keyState == 1)
+	// 前フレームで押されておらず、現フレームで押されている場合のみトリガー検知とする
+	if (mDownBuffer[KeyCode] == 0 && keyState == 1)
 	{
 		result = 1;
 	}
 
-	// 現在のキー状態をバッファに格納
+	// 現在の入力を前フレーム用としてバッファに記憶
 	mDownBuffer[KeyCode] = keyState;
 
 	return result;
 }
 
-// 指定されたキーが離された瞬間だけ 1 を返す関数
+// キーが離された瞬間を検知する
 int InputManager::CheckUpKey(int KeyCode)
 {
-	// 戻り値用の変数を用意
 	int result = 0;
 
-	// 指定キーの現在の状態を取得
+	// 指定されたキーの現在の入力を取得
 	int keyState = CheckHitKey(KeyCode);
 
-	// 前回キーが押されており、かつ、現在キーが押されていなかったら「キーを離した瞬間」とする
-	if(mUpBuffer[KeyCode] == 1 && keyState == 0)
+	// 前フレームで押されており、現フレームで離されている場合のみリリース検知とする
+	if (mUpBuffer[KeyCode] == 1 && keyState == 0)
 	{
 		result = 1;
 	}
 
-	// 現在のキー状態をバッファに格納
+	// 現在の入力をバッファに記憶
 	mUpBuffer[KeyCode] = keyState;
 
 	return result;
 }
 
-// 指定されたキーを押し続けている間１を返す関数
+// キーが押されているかどうかの状態生値を取得する
 int InputManager::CheckPressKey(int KeyCode)
 {
 	return CheckHitKey(KeyCode);
 }
 
-// 指定されたマウスボタンが押された瞬間だけ 1 を返す関数
+// マウスボタンが押された瞬間を検知する
 int InputManager::CheckDownMouse(int MouseCode)
 {
-	// 戻り値用の変数を用意
 	int result = 0;
-	// 指定マウスボタンの現在の状態を取得
+	// 指定されたボタンの現在の押下状態を取得
 	int mouseState = CheckPressMouse(MouseCode);
-	// 前回マウスボタンが押されておらず、かつ、現在マウスボタンが押されていたら「マウスボタンを押した瞬間」とする
-	if(mMouseDownBuffer[MouseCode] == 0 && mouseState == 1)
+
+	// 前フレームで押されておらず、現フレームで押されている場合のみトリガーとする
+	if (mMouseDownBuffer[MouseCode] == 0 && mouseState == 1)
 	{
 		result = 1;
 	}
-	// 現在のマウスボタン状態をバッファに格納
+	// 現在の状態をバッファに記憶
 	mMouseDownBuffer[MouseCode] = mouseState;
 	return result;
 }
 
-// 指定されたマウスボタンが離された瞬間だけ 1 を返す関数 
+// マウスボタンが離された瞬間を検知する
 int InputManager::CheckUpMouse(int MouseCode)
 {
-	// 戻り値用の変数を用意
 	int result = 0;
-	// 指定マウスボタンの現在の状態を取得
+	// 指定されたボタンの現在の押下状態を取得
 	int mouseState = CheckPressMouse(MouseCode);
-	// 前回マウスボタンが押されており、かつ、現在マウスボタンが押されていなかったら「マウスボタンを離した瞬間」とする
-	if(mMouseUpBuffer[MouseCode] == 1 && mouseState == 0)
+
+	// 前フレームで押されており、現フレームで離されている場合のみリリースとする
+	if (mMouseUpBuffer[MouseCode] == 1 && mouseState == 0)
 	{
 		result = 1;
 	}
-	// 現在のマウスボタン状態をバッファに格納
+	// 現在の状態をバッファに記憶
 	mMouseUpBuffer[MouseCode] = mouseState;
 	return result;
 }
 
-// 指定されたマウスボタンを押し続けている間１を返す関数
+// マウスボタンが現在押されているかを判定する
 int InputManager::CheckPressMouse(int MouseCode)
 {
+	// ＤＸライブラリのGetMouseInput関数の出力から指定ビットと論理積をとる
 	return GetMouseInput() & MouseCode;
 }

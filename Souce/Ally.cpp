@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // Ally.cpp
 // =============================================================================
 #include "Ally.h"
@@ -19,7 +19,7 @@ void Ally::Reset(float x, float y)
 	m_destY = y;
 	m_destTimer = 0;
 
-	// Pick a completely random color preset from the 8 available options
+	// 8つの選択肢から完全にランダムなカラープリセットを選択
 	m_color = static_cast<ColorPreset>(GetRand(static_cast<int>(ColorPreset::Count) - 1));
 
 	m_autoFireCooldown = 0;
@@ -42,7 +42,7 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		return;
 	}
 
-	// 1. Movement AI: Free-spirited patrol and bullet evasion steering AI
+	// 1. 移動AI：気ままなパトロールと弾幕回避の操舵AI
 	if (m_destTimer > 0)
 	{
 		--m_destTimer;
@@ -52,12 +52,12 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 	float dyToDest = m_destY - m_y;
 	float distToDest = sqrtf(dxToDest * dxToDest + dyToDest * dyToDest);
 
-	// Select a new random location inside optimal battle spaces periodically or when reached
+	// 定期的に、または目標に到達したときに、最適な戦闘空間内の新しいランダムな場所を選択
 	if (m_destTimer <= 0 || distToDest < 30.0f)
 	{
 		m_destX = SCREEN_WIDTH * 0.15f + GetRand((int)(SCREEN_WIDTH * 0.7f));
 		m_destY = SCREEN_HEIGHT * 0.25f + GetRand((int)(SCREEN_HEIGHT * 0.55f));
-		m_destTimer = 90 + GetRand(120); // 1.5s to 3.5s
+		m_destTimer = 90 + GetRand(120); // 1.5秒から3.5秒
 	}
 
 	float moveX = 0.0f;
@@ -68,7 +68,7 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		moveY = dyToDest / distToDest;
 	}
 
-	// Bullet Evasion Vector: Steer away if dangerous enemy shots are nearby (within 100px)
+	// 弾幕回避ベクトル：近く（100px以内）に危険な敵の弾がある場合は離れるように操舵
 	for (int i = 0; i < maxAttacks; ++i)
 	{
 		const auto& attack = attacks[i];
@@ -79,14 +79,14 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 			float bDist = sqrtf(bDx * bDx + bDy * bDy);
 			if (bDist < 100.0f && bDist > 0.001f)
 			{
-				// steer force
+				// 回避の操舵力
 				moveX += (bDx / bDist) * 2.0f;
 				moveY += (bDy / bDist) * 2.0f;
 			}
 		}
 	}
 
-	// Maintain breathing room from player (don't stack directly on top, e.g. within 60px)
+	// プレイヤーとの適切な距離を保つ（直接重なり合わないようにする、例：60px以内）
 	float pDx = m_x - px;
 	float pDy = m_y - py;
 	float pDist = sqrtf(pDx * pDx + pDy * pDy);
@@ -96,7 +96,7 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		moveY += (pDy / pDist) * 1.5f;
 	}
 
-	// Keep healthy space from nearest enemy to avoid collision damage (keep > 120px)
+	// 接触ダメージを避けるため、最も近い敵から安全な距離を保つ（120px以上を維持）
 	const Enemy* nearestEnemy = FindNearestAliveEnemy(enemies, activeEnemyCount);
 	if (nearestEnemy != nullptr)
 	{
@@ -110,11 +110,11 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		}
 	}
 
-	// Apply autonomous speed multiplier
+	// 自律移動の速度倍率を適用
 	float speedMult = 1.0f;
 	if (m_skillActive && m_color == ColorPreset::White)
 	{
-		speedMult = 1.4f; // 1.4x movement speed during Overdrive
+		speedMult = 1.4f; // オーバードライブ中は移動速度1.4倍
 	}
 
 	const float speed = PLAYER_SPEED * speedMult;
@@ -127,14 +127,14 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		m_y += moveY * speed;
 	}
 
-	// Keep Ally within screen bounds
+	// 味方NPCを画面の境界内に収める
 	const float margin = m_radius;
 	if (m_x < margin) m_x = margin;
 	if (m_x > SCREEN_WIDTH - margin) m_x = SCREEN_WIDTH - margin;
 	if (m_y < margin) m_y = margin;
 	if (m_y > SCREEN_HEIGHT - margin) m_y = SCREEN_HEIGHT - margin;
 
-	// 2. Shooting Loop
+	// 2. 射撃ループ
 	if (m_autoFireCooldown > 0)
 	{
 		--m_autoFireCooldown;
@@ -144,7 +144,7 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		TryAutoFire(enemies, activeEnemyCount, iceShots, maxShots);
 	}
 
-	// 3. Active Skill Timers
+	// 3. アクティブスキルのタイマー処理
 	if (m_skillCooldownTimer > 0)
 	{
 		--m_skillCooldownTimer;
@@ -164,10 +164,10 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		}
 	}
 
-	// Explosion visual timer
+	// 爆発の演出タイマー
 	if (m_drawExplosion)
 	{
-		m_explosionDrawRadius += 340.0f / 30.0f; // Expand up to 350px in 30 frames
+		m_explosionDrawRadius += 340.0f / 30.0f; // 30フレームで最大350pxまで拡大
 		--m_explosionDrawTimer;
 		if (m_explosionDrawTimer <= 0)
 		{
@@ -175,8 +175,8 @@ void Ally::Update(float px, float py, const Enemy* enemies, int activeEnemyCount
 		}
 	}
 
-	// 4. Autonomous Skill activation
-	// Trigger skill if: not currently active, not on cooldown, and alive enemies exist
+	// 4. スキルの自動発動
+	// スキルが未発動、クールダウン中ではない、かつ生存している敵が存在する場合にスキルを誘発
 	if (!m_skillActive && m_skillCooldownTimer <= 0)
 	{
 		bool anyAlive = false;
@@ -203,13 +203,13 @@ void Ally::TryAutoFire(const Enemy* enemies, int activeEnemyCount, IceProjectile
 		return;
 	}
 
-	// Infinite ammo simulation (no shotbudget checks, Ally has unlimited shots)
-	// Spawn Ally projectile at target coords with shared stats
+	// 無限弾薬のシミュレーション（残弾数チェックはなく、味方NPCは無限に射撃可能）
+	// 共有ステータスを持つ味方NPCの発射体をターゲット座標にスポーン
 	bool spawned = false;
 	const float tx = target->GetX();
 	const float ty = target->GetY();
 
-	// Ally fires standard shots (no multishots or homing to keep code clean and robust)
+	// 味方NPCは通常ショットを発射（コードの簡潔さと堅牢性を保つため、マルチショットや追尾はなし）
 	for (int i = 0; i < maxShots; ++i)
 	{
 		if (!iceShots[i].active)
@@ -222,7 +222,7 @@ void Ally::TryAutoFire(const Enemy* enemies, int activeEnemyCount, IceProjectile
 
 	if (spawned)
 	{
-		// Share's player's 1st status (FireRate)
+		// プレイヤーの1つ目のステータス（連射速度：FireRate）を共有
 		m_autoFireCooldown = GameSession::GetAutoFireInterval();
 	}
 }
@@ -236,19 +236,19 @@ void Ally::TriggerSkill(const Enemy* enemies, int activeEnemyCount)
 
 	if (m_color == ColorPreset::Brown)
 	{
-		// Immediate self-explosion at Ally coordinates
+		// 味方NPCの現在座標で即座に自己爆発を発動
 		m_explosionX = m_x;
 		m_explosionY = m_y;
 		m_drawExplosion = true;
 		m_explosionDrawRadius = 10.0f;
 		m_explosionDrawTimer = 30;
 
-		const int expDamage = GameSession::GetIceDamage() * 5; // Shared player 3rd stat (Damage) * 5
+		const int expDamage = GameSession::GetIceDamage() * 5; // プレイヤーの3つ目のステータス（ダメージ：Damage）の5倍を共有
 		const float expRadius = 350.0f;
 
 		for (int i = 0; i < activeEnemyCount; ++i)
 		{
-			// Non-const cast to apply damage to enemies
+			// 敵にダメージを適用するため、非constキャストを行う
 			Enemy& enemy = const_cast<Enemy&>(enemies[i]);
 			if (!enemy.IsAlive())
 			{
@@ -266,11 +266,11 @@ void Ally::TriggerSkill(const Enemy* enemies, int activeEnemyCount)
 		}
 
 		m_skillActive = true;
-		m_skillActiveTimer = 1; // Ends immediately to cycle cooldown
+		m_skillActiveTimer = 1; // 即座に終了してクールダウンのサイクルに入る
 	}
 	else if (m_color == ColorPreset::Black)
 	{
-		// Singularity: spawns black hole pulling gravity center at Ally location
+		// シンギュラリティ：味方NPCの位置に、周囲の敵を引き寄せるブラックホールを生成
 		m_blackholeX = m_x;
 		m_blackholeY = m_y;
 		m_skillActive = true;
@@ -285,7 +285,7 @@ void Ally::TriggerSkill(const Enemy* enemies, int activeEnemyCount)
 
 const Enemy* Ally::FindNearestAliveEnemy(const Enemy* enemies, int activeEnemyCount) const
 {
-	// Priority Target 1: Tanks
+	// 優先ターゲット1：タンク（盾持ち）
 	const Enemy* nearestTank = nullptr;
 	float minTankDistSq = 1e9f;
 
@@ -310,7 +310,7 @@ const Enemy* Ally::FindNearestAliveEnemy(const Enemy* enemies, int activeEnemyCo
 		return nearestTank;
 	}
 
-	// Priority Target 2: Closest generic alive enemy
+	// 優先ターゲット2：生存している最も近い一般の敵
 	const Enemy* nearestEnemy = nullptr;
 	float minDistSq = 1e9f;
 
@@ -340,21 +340,21 @@ void Ally::Draw() const
 		return;
 	}
 
-	// 1. Draw body circle using randomized ColorPreset
+	// 1. ランダム化されたColorPresetを使用して本体の円を描画
 	const int bodyColor = PlayerSettings::GetPresetBodyColor(m_color);
-	const int outlineColor = GetColor(255, 255, 255); // Prominent white outline for ALLY
+	const int outlineColor = GetColor(255, 255, 255); // 味方NPC（ALLY）用の目立つ白い輪郭線
 
 	DrawCircle((int)m_x, (int)m_y, (int)m_radius, bodyColor, TRUE);
 	DrawCircle((int)m_x, (int)m_y, (int)m_radius, outlineColor, FALSE);
 
-	// 2. Draw interior details to give Ally a futuristic "co-pilot" visual
+	// 2. 味方NPCに未来的な「コ・パイロット（副操縦士）」風のビジュアルを与えるため、内部のディテールを描画
 	DrawCircle((int)m_x, (int)m_y, (int)(m_radius * 0.4f), GetColor(255, 255, 255), TRUE);
 
-	// 3. Draw high-fidelity visual tag above Ally
+	// 3. 味方NPCの頭上に高精細なビジュアルタグを描画
 	const int textColor = GetColor(200, 255, 220);
 	const int textShadowColor = GetColor(0, 0, 0);
 
-	// Shadowed text
+	// ドロップシャドウ付きのテキスト
 	DrawFormatString((int)m_x - 39, (int)m_y - 34, textShadowColor, "[ALLY: NPC]");
 	DrawFormatString((int)m_x - 40, (int)m_y - 35, textColor, "[ALLY: NPC]");
 }

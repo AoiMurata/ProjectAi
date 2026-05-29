@@ -1,4 +1,4 @@
-// =============================================================================
+﻿// =============================================================================
 // IceProjectile.cpp
 // =============================================================================
 #include "IceProjectile.h"
@@ -44,7 +44,7 @@ void IceProjectile::Update(float targetX, float targetY, bool hasTarget, float h
 
 	++lifetime;
 
-	// Despawn homing bullets after 2 seconds (120 frames) to optimize performance and prevent lag
+	// パフォーマンス最適化とラグ防止のため、追尾弾は2秒後（120フレーム経過）にデスポーンする
 	if (homing && lifetime >= 120)
 	{
 		active = false;
@@ -88,7 +88,7 @@ void IceProjectile::Draw() const
 
 	if (isAllyShot)
 	{
-		// Distinctive premium light emerald hue for Ally's shots
+		// 味方NPCの弾用に、特徴的なプレミアム・ライトエメラルドの色調を適用
 		iceColor = GetColor(150, 240, 190);
 		coreColor = GetColor(230, 255, 240);
 	}
